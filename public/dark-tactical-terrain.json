@@ -1,6 +1,6 @@
 {
   "version": 8,
-  "name": "SUC Dark Navy 3D",
+  "name": "SUC Minimal Dark Topo 3D",
   "glyphs": "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
 
   "sources": {
@@ -12,20 +12,7 @@
       "tileSize": 256,
       "maxzoom": 13
     },
-
-    "dark-base": {
-      "type": "raster",
-      "tiles": [
-        "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-        "https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-        "https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-        "https://d.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"
-      ],
-      "tileSize": 256,
-      "maxzoom": 19
-    },
-
-    "opentopo-lines": {
+    "topo-raster": {
       "type": "raster",
       "tiles": [
         "https://tile.opentopomap.org/{z}/{x}/{y}.png"
@@ -41,11 +28,11 @@
   },
 
   "fog": {
-    "range": [0.6, 2.0],
-    "color": "#050816",
-    "horizon-blend": 0.16,
-    "high-color": "#0b1426",
-    "space-color": "#000009",
+    "range": [0.7, 2.0],
+    "color": "#050814",
+    "horizon-blend": 0.15,
+    "high-color": "#0b1528",
+    "space-color": "#000008",
     "star-intensity": 0.0
   },
 
@@ -57,31 +44,16 @@
         "background-color": "#050814"
       }
     },
-
     {
-      "id": "dark-base",
+      "id": "topo-minimal",
       "type": "raster",
-      "source": "dark-base",
+      "source": "topo-raster",
       "paint": {
-        "raster-opacity": 1.0,
-        "raster-saturation": 0.0,
-        "raster-brightness-min": 0.1,
-        "raster-brightness-max": 0.8,
-        "raster-contrast": 0.3,
-        "raster-hue-rotate": -6
-      }
-    },
-
-    {
-      "id": "opentopo-lines-layer",
-      "type": "raster",
-      "source": "opentopo-lines",
-      "paint": {
-        "raster-opacity": 0.35,
+        "raster-opacity": 0.30,
         "raster-saturation": -1.0,
         "raster-brightness-min": 0.55,
-        "raster-brightness-max": 0.9,
-        "raster-contrast": 0.45,
+        "raster-brightness-max": 0.85,
+        "raster-contrast": 0.4,
         "raster-hue-rotate": 0
       }
     }
