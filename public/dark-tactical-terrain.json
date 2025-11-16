@@ -37,7 +37,7 @@
 
   "terrain": {
     "source": "terrain-dem",
-    "exaggeration": 0.25
+    "exaggeration": 0.075
   },
 
   "fog": {
