@@ -49,7 +49,7 @@ export default function MultiRouteMap({ event, selectedRoute }: Props) {
     );
     map.addControl(
       new maplibregl.NavigationControl({ showCompass: false }),
-      "top-left",
+      "top-right",
     );
     map.on("load", () => {
       if (!map.getSource("esri-satellite")) {
