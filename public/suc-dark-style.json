@@ -1,0 +1,108 @@
+{
+  "version": 8,
+  "name": "SUC Dark Trail Map",
+  "sources": {
+    "satellite": {
+      "type": "raster",
+      "tiles": [
+        "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+      ],
+      "tileSize": 256,
+      "maxzoom": 19
+    },
+
+    "hillshade": {
+      "type": "raster",
+      "tiles": [
+        "https://tiles.versatiles.org/tiles/hillshade/{z}/{x}/{y}.webp"
+      ],
+      "tileSize": 256,
+      "maxzoom": 14
+    },
+
+    "contours": {
+      "type": "vector",
+      "url": "https://tiles.versatiles.org/tiles/contours.json",
+      "maxzoom": 14
+    }
+  },
+
+  "sprite": "https://demotiles.maplibre.org/styles/osm-bright/sprite",
+  "glyphs": "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+
+  "layers": [
+    {
+      "id": "satellite-base",
+      "type": "raster",
+      "source": "satellite",
+      "paint": {
+        "raster-opacity": 1.0,
+        "raster-saturation": -0.75,
+        "raster-brightness-min": 0.2,
+        "raster-brightness-max": 0.8,
+        "raster-contrast": 0.25
+      }
+    },
+
+    {
+      "id": "hillshade",
+      "type": "raster",
+      "source": "hillshade",
+      "paint": {
+        "raster-opacity": 0.45,
+        "raster-contrast": 0.3,
+        "raster-brightness-min": 0.2,
+        "raster-brightness-max": 0.9
+      }
+    },
+
+    {
+      "id": "darken-overlay",
+      "type": "background",
+      "paint": {
+        "background-color": "rgba(0, 0, 0, 0.25)"
+      }
+    },
+
+    {
+      "id": "contours",
+      "type": "line",
+      "source": "contours",
+      "source-layer": "contours",
+      "paint": {
+        "line-color": "#555",
+        "line-width": 1,
+        "line-opacity": 0.5
+      }
+    },
+
+    {
+      "id": "contours-bold",
+      "type": "line",
+      "source": "contours",
+      "source-layer": "contours",
+      "filter": [">", ["get", "elevation"], 400],
+      "paint": {
+        "line-color": "#777",
+        "line-width": 1.4,
+        "line-opacity": 0.6
+      }
+    },
+
+    {
+      "id": "place-labels",
+      "type": "symbol",
+      "source": "satellite",
+      "layout": {
+        "text-size": 14,
+        "text-font": ["Open Sans Regular"],
+        "text-field": ["get", "name"]
+      },
+      "paint": {
+        "text-color": "rgba(255,255,255,0.65)",
+        "text-halo-color": "rgba(0,0,0,0.75)",
+        "text-halo-width": 1.2
+      }
+    }
+  ]
+}

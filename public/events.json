@@ -1,0 +1,51 @@
+[
+  {
+    "eventId": "SUC-023",
+    "eventName": "SUC 023 – Gold Country",
+    "eventDescription": "Rolling foothills and two big climbs.",
+    "eventDate": "November 15, 2025",
+    "eventTime": "7:15 AM",
+    "routes": [
+      {
+        "id": "SUC-023-LRG",
+        "label": "LRG",
+        "name": "Large Route",
+        "description": "Longer loop with main ridge section.",
+        "color": "#13FFE2",
+        "gpxUrl": "/gpx/SUC-023/SUC-023-LRG.gpx",
+        "geojsonUrl": "/routes/SUC-023-LRG.geojson",
+        "statsUrl": "/routes/SUC-023-LRG.json"
+      },
+      {
+        "id": "SUC-023-MED",
+        "label": "MED",
+        "name": "Medium Route",
+        "description": "Warm-up loop with punchy climbs.",
+        "color": "#00FF99",
+        "gpxUrl": "/gpx/SUC-023/SUC-023-MED.gpx",
+        "geojsonUrl": "/routes/SUC-023-MED.geojson",
+        "statsUrl": "/routes/SUC-023-MED.json"
+      },
+      {
+        "id": "SUC-023-XL",
+        "label": "XL",
+        "name": "XL Route",
+        "description": "Full route, big day out.",
+        "color": "#FF47A1",
+        "gpxUrl": "/gpx/SUC-023/SUC-023-XL.gpx",
+        "geojsonUrl": "/routes/SUC-023-XL.geojson",
+        "statsUrl": "/routes/SUC-023-XL.json"
+      },
+      {
+        "id": "SUC-023-XXL",
+        "label": "XXL",
+        "name": "XXL Route",
+        "description": "Ultra endurance option.",
+        "color": "#9B4DFF",
+        "gpxUrl": "/gpx/SUC-023/SUC-023-XXL.gpx",
+        "geojsonUrl": "/routes/SUC-023-XXL.geojson",
+        "statsUrl": "/routes/SUC-023-XXL.json"
+      }
+    ]
+  }
+]
