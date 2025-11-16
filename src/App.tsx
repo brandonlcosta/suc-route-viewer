@@ -1,4 +1,4 @@
-// src/App.tsx — SUC Route Viewer (Compact Header + Route Tabs Layout)
+// src/App.tsx — SUC Route Viewer (Clean + Correct Map Updating)
 
 import { useEffect, useMemo, useState } from "react";
 import MultiRouteMap from "./components/MultiRouteMap";
@@ -12,40 +12,41 @@ export default function App() {
   const [activeEventId, setActiveEventId] = useState<string | null>(null);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
 
-  // Initial load
+  // Load events on mount
   useEffect(() => {
     async function init() {
-      const ev = await loadSUCEvents();
-      setEvents(ev);
+      const loaded = await loadSUCEvents();
+      setEvents(loaded);
 
-      if (ev.length > 0) {
-        const firstEvent = ev[0];
-        const firstRoute = firstEvent.routes[0];
-
+      if (loaded.length > 0) {
+        const firstEvent = loaded[0];
         setActiveEventId(firstEvent.eventId);
-        setSelectedRouteId(firstRoute ? firstRoute.id : null);
+
+        if (firstEvent.routes.length > 0) {
+          setSelectedRouteId(firstEvent.routes[0].id);
+        }
       }
     }
     init();
   }, []);
 
-  // Derive active event from ID + events
+  // Retrieve active event
   const activeEvent: SUCEvent | null = useMemo(() => {
     if (events.length === 0) return null;
-    if (!activeEventId) return events[0];
     return events.find((e) => e.eventId === activeEventId) ?? events[0];
   }, [events, activeEventId]);
 
-  // Derive selected route from ID + active event
+  // Retrieve selected route
   const selectedRoute: SUCRoute | null = useMemo(() => {
-    if (!activeEvent || activeEvent.routes.length === 0) return null;
-    if (!selectedRouteId) return activeEvent.routes[0];
+    if (!activeEvent) return null;
     return (
       activeEvent.routes.find((r) => r.id === selectedRouteId) ??
-      activeEvent.routes[0]
+      activeEvent.routes[0] ??
+      null
     );
   }, [activeEvent, selectedRouteId]);
 
+  // Event change
   const handleEventSelect = (eventId: string) => {
     setActiveEventId(eventId);
 
@@ -54,19 +55,21 @@ export default function App() {
     setSelectedRouteId(firstRoute ? firstRoute.id : null);
   };
 
+  // Route tab change
   const handleRouteSelect = (route: SUCRoute) => {
     setSelectedRouteId(route.id);
   };
 
-  const selectedRouteTag = selectedRoute ? getRouteTag(selectedRoute) : null;
+  const tag = selectedRoute ? getRouteTag(selectedRoute) : null;
 
   return (
     <div className="suc-app">
-      {/* Compact Header with Event Selector */}
+      {/* HEADER */}
       <header className="suc-header suc-header--compact">
         <div className="suc-header-left">
           <div className="suc-header-row">
             {events.length === 0 && <span>Loading Events…</span>}
+
             {events.length > 0 && activeEvent && (
               <select
                 className="suc-event-select suc-event-select--compact"
@@ -95,7 +98,9 @@ export default function App() {
                   <span className="suc-event-dot">•</span>
                 )}
                 {activeEvent.eventTime && (
-                  <span className="suc-event-time">{activeEvent.eventTime}</span>
+                  <span className="suc-event-time">
+                    {activeEvent.eventTime}
+                  </span>
                 )}
               </span>
             </div>
@@ -112,58 +117,42 @@ export default function App() {
         </div>
       </header>
 
-      {/* MAIN LAYOUT — Map on top, Routes below */}
+      {/* MAIN LAYOUT */}
       <main className="suc-main-vertical">
-        {/* MAP BLOCK */}
+        {/* MAP */}
         <section className="suc-map-shell">
           <div className="suc-map-panel">
-            <div className="suc-map-header">
-              <h2>Map</h2>
-              {selectedRoute && (
-                <span className="suc-map-route-meta">
-                  {selectedRouteTag && (
-                    <span className="suc-route-tag suc-route-tag-inline">
-                      {selectedRouteTag}
-                    </span>
-                  )}
-                  <span className="suc-map-route-name">
-                    {selectedRoute.name}
-                  </span>
-                  <span className="suc-map-route-stats">
-                    {selectedRoute.distanceMi.toFixed(1)} mi ·{" "}
-                    {Math.round(selectedRoute.elevationFt).toLocaleString()} ft ↑
-                  </span>
-                </span>
-              )}
-            </div>
-
             <div className="suc-map-container">
-              <MultiRouteMap event={activeEvent} selectedRoute={selectedRoute} />
+              {/* Key ensures map updates cleanly when routes change */}
+              <MultiRouteMap
+                key={selectedRoute?.id}
+                event={activeEvent}
+                selectedRoute={selectedRoute}
+              />
             </div>
           </div>
         </section>
 
-        {/* ROUTE TABS + DETAIL BELOW MAP */}
+        {/* ROUTES + DETAIL */}
         {activeEvent && (
           <section className="suc-routelist-shell">
+            {/* Route Tabs */}
             <div className="suc-route-tabs">
               {activeEvent.routes.map((route) => {
                 const isSelected = route.id === selectedRouteId;
-                const tag = getRouteTag(route);
+                const routeTag = getRouteTag(route);
 
                 return (
                   <button
                     key={route.id}
                     type="button"
-                    className={`suc-route-tab-btn ${tag ?? ""} ${
+                    className={`suc-route-tab-btn ${routeTag ?? ""} ${
                       isSelected ? "is-selected" : ""
                     }`}
                     onClick={() => handleRouteSelect(route)}
                   >
-                    {tag && (
-                      <span className="suc-route-tab-label">
-                        {tag}
-                      </span>
+                    {routeTag && (
+                      <span className="suc-route-tab-label">{routeTag}</span>
                     )}
                     <span className="suc-route-tab-distance">
                       {route.distanceMi.toFixed(1)} mi
@@ -173,24 +162,23 @@ export default function App() {
               })}
             </div>
 
+            {/* Detail Card */}
             {selectedRoute && (
               <div className="suc-route-detail">
                 <div className="suc-route-detail-header">
-                  {selectedRouteTag && (
-                    <span
-                      className={`suc-route-tag suc-route-tab-tag suc-route-tag-${selectedRouteTag}`}
-                    >
-                      {selectedRouteTag}
+                  {tag && (
+                    <span className={`suc-route-tag suc-route-tag-${tag}`}>
+                      {tag}
                     </span>
                   )}
+
                   <div className="suc-route-detail-titleblock">
                     <span className="suc-route-detail-name">
                       {selectedRoute.name}
                     </span>
                     <span className="suc-route-detail-stats">
                       {selectedRoute.distanceMi.toFixed(1)} mi ·{" "}
-                      {Math.round(selectedRoute.elevationFt).toLocaleString()} ft
-                      ↑
+                      {Math.round(selectedRoute.elevationFt).toLocaleString()} ft ↑
                     </span>
                   </div>
                 </div>
@@ -201,7 +189,6 @@ export default function App() {
                   </p>
                 )}
 
-                {/* Inline elevation chart for the selected route */}
                 <ElevationChart route={selectedRoute} />
 
                 <div className="suc-route-detail-actions">
@@ -222,17 +209,14 @@ export default function App() {
   );
 }
 
-/**
- * Map verbose route names to short tags.
- * Falls back to null if we can't infer.
- */
+/** Route tag classification */
 function getRouteTag(route: SUCRoute): string | null {
-  const name = route.name.toLowerCase();
+  const n = route.name.toLowerCase();
 
-  if (name.includes("xxl")) return "XXL";
-  if (name.includes("xl")) return "XL";
-  if (name.includes("medium") || name.startsWith("med")) return "MED";
-  if (name.includes("large") || name.startsWith("lrg")) return "LRG";
+  if (n.includes("xxl")) return "XXL";
+  if (n.includes("xl")) return "XL";
+  if (n.includes("med") || n.includes("medium")) return "MED";
+  if (n.includes("lrg") || n.includes("large")) return "LRG";
 
   return null;
 }

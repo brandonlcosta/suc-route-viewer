@@ -129,25 +129,22 @@ body {
   flex-direction: column;
 }
 
+/* Map header text spacing */
 .suc-map-header {
-  padding: 0.65rem 1rem;
-  border-bottom: 1px solid rgba(70, 70, 120, 0.55);
-
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-
-  font-size: 0.9rem;
-  background: rgba(8, 10, 20, 0.65);
-  backdrop-filter: blur(12px);
+  gap: 0.6rem;
+  line-height: 1.2;
 }
 
 .suc-map-header h2 {
   margin: 0;
-  font-size: 0.9rem;
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
-  opacity: 0.75;
+  line-height: 1.1;
+}
+
+.suc-map-route-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-size: 0.86rem;
 }
 
 .suc-map-container {
@@ -258,13 +255,12 @@ body {
 }
 
 .suc-route-detail-name {
-  font-size: 1rem;
-  font-weight: 600;
+  line-height: 1.15;
 }
 
 .suc-route-detail-stats {
-  font-size: 0.83rem;
-  opacity: 0.75;
+  margin-top: 0.1rem;
+  line-height: 1.2;
 }
 
 .suc-route-detail-description {

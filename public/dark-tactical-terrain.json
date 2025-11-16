@@ -1,0 +1,106 @@
+{
+  "version": 8,
+  "name": "SUC Dark Tactical Terrain",
+  "glyphs": "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+
+  "sources": {
+    "terrain-dem": {
+      "type": "raster-dem",
+      "tiles": [
+        "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "maxzoom": 13
+    },
+
+    "hillshade-dem": {
+      "type": "raster-dem",
+      "tiles": [
+        "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "maxzoom": 13
+    },
+
+    "basemap": {
+      "type": "raster",
+      "tiles": [
+        "https://tile.opentopomap.org/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "maxzoom": 17
+    },
+
+    "opentopo-lines": {
+      "type": "raster",
+      "tiles": [
+        "https://tile.opentopomap.org/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "maxzoom": 17
+    }
+  },
+
+  "terrain": {
+    "source": "terrain-dem",
+    "exaggeration": 0.075
+  },
+
+  "fog": {
+    "range": [0.7, 2.5],
+    "color": "#060912",
+    "horizon-blend": 0.18,
+    "high-color": "#0d1630",
+    "space-color": "#000009",
+    "star-intensity": 0.0
+  },
+
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": {
+        "background-color": "#03040a"
+      }
+    },
+
+    {
+      "id": "basemap",
+      "type": "raster",
+      "source": "basemap",
+      "paint": {
+        "raster-opacity": 0.55,
+        "raster-saturation": -1.0,
+        "raster-brightness-min": 0.10,
+        "raster-brightness-max": 0.95,
+        "raster-contrast": 0.22,
+        "raster-hue-rotate": 0
+      }
+    },
+
+    {
+      "id": "hillshade",
+      "type": "hillshade",
+      "source": "hillshade-dem",
+      "paint": {
+        "hillshade-shadow-color": "#02040b",
+        "hillshade-highlight-color": "#5a7cff",
+        "hillshade-accent-color": "#304070",
+        "hillshade-exaggeration": 0.35
+      }
+    },
+
+    {
+      "id": "opentopo-lines-layer",
+      "type": "raster",
+      "source": "opentopo-lines",
+      "paint": {
+        "raster-opacity": 0.38,
+        "raster-saturation": -1.0,
+        "raster-brightness-min": 0.60,
+        "raster-brightness-max": 0.98,
+        "raster-contrast": 0.45
+      }
+    }
+  ]
+}
