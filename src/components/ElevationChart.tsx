@@ -1,11 +1,13 @@
 // src/components/ElevationChart.tsx
 //
-// Elevation profile for the currently selected SUC route.
-// Raw stats series are stored in meters; this converts them to miles (x-axis)
-// and feet (y-axis), rounding elevation to the nearest foot.
+// Elevation profile for the selected SUC route.
+// Converts stored meter-based series into:
+//   • miles (x-axis)
+//   • feet (y-axis, rounded)
 
 import { useMemo } from "react";
 import type { FC } from "react";
+
 import {
   Chart as ChartJS,
   LineElement,
@@ -14,7 +16,10 @@ import {
   Tooltip,
   Filler,
 } from "chart.js";
+
+import type { ChartOptions, ChartData } from "chart.js";
 import { Line } from "react-chartjs-2";
+
 import type { SUCRoute as LoaderRoute } from "../data/loadEvents";
 
 type RouteWithSeries = LoaderRoute & {
@@ -34,37 +39,45 @@ const FEET_PER_METER = 3.28084;
 const ElevationChart: FC<ElevationChartProps> = ({ route }) => {
   const { data, options, hasSeries } = useMemo(() => {
     if (!route) {
-      return { data: undefined, options: undefined, hasSeries: false };
+      return {
+        data: undefined as ChartData<"line"> | undefined,
+        options: undefined as ChartOptions<"line"> | undefined,
+        hasSeries: false,
+      };
     }
 
-    const distanceSeriesM = route.distanceSeries ?? [];
-    const elevationSeriesM = route.elevationSeries ?? [];
+    const distM = route.distanceSeries ?? [];
+    const elevM = route.elevationSeries ?? [];
 
-    // Convert raw meters → miles / feet
-    const distanceSeriesMi = distanceSeriesM.map((m) =>
+    // Convert meters → miles / feet
+    const distMi = distM.map((m) =>
       Number.isFinite(m) ? (m as number) / METERS_PER_MILE : m,
     );
-    const elevationSeriesFt = elevationSeriesM.map((m) =>
+    const elevFt = elevM.map((m) =>
       Number.isFinite(m) ? Math.round((m as number) * FEET_PER_METER) : m,
     );
 
     const validSeries =
-      distanceSeriesMi.length > 1 &&
-      distanceSeriesMi.length === elevationSeriesFt.length;
+      distMi.length > 1 && distMi.length === elevFt.length;
+
     if (!validSeries) {
-      return { data: undefined, options: undefined, hasSeries: false };
+      return {
+        data: undefined,
+        options: undefined,
+        hasSeries: false,
+      };
     }
 
-    const labels = distanceSeriesMi.map((d) =>
+    const labels = distMi.map((d) =>
       Number.isFinite(d) ? Number((d as number).toFixed(1)) : d,
     );
 
-    const chartData = {
+    const chartData: ChartData<"line"> = {
       labels,
       datasets: [
         {
           label: "Elevation",
-          data: elevationSeriesFt,
+          data: elevFt,
           fill: true,
           borderWidth: 2,
           tension: 0.3,
@@ -72,13 +85,13 @@ const ElevationChart: FC<ElevationChartProps> = ({ route }) => {
           pointHitRadius: 6,
           backgroundColor: route.color
             ? toRgba(route.color, 0.25)
-            : "rgba(255, 0, 255, 0.25)",
+            : "rgba(255,0,255,0.25)",
           borderColor: route.color ?? "#ff00ff",
         },
       ],
     };
 
-    const chartOptions: Parameters<typeof Line>[0]["options"] = {
+    const chartOptions: ChartOptions<"line"> = {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
@@ -87,14 +100,16 @@ const ElevationChart: FC<ElevationChartProps> = ({ route }) => {
           mode: "index",
           intersect: false,
           callbacks: {
-            // Tooltip in mi / ft with rounded elevation
-            label: (ctx) => {
-              const rawLabel = ctx.label;
+            label: (ctx: any) => {
+              const xRaw = ctx.parsed?.x;
+              const yRaw = ctx.parsed?.y;
+
               const distance =
-                typeof rawLabel === "number"
-                  ? rawLabel.toFixed(1)
-                  : String(rawLabel);
-              const elevation = Math.round(ctx.parsed.y);
+                typeof xRaw === "number" ? xRaw.toFixed(1) : "0";
+
+              const elevation =
+                typeof yRaw === "number" ? Math.round(yRaw) : 0;
+
               return ` ${distance} mi • ${elevation} ft`;
             },
           },
@@ -111,9 +126,7 @@ const ElevationChart: FC<ElevationChartProps> = ({ route }) => {
             autoSkip: true,
             maxTicksLimit: 6,
           },
-          grid: {
-            display: false,
-          },
+          grid: { display: false },
         },
         y: {
           title: {
@@ -123,9 +136,6 @@ const ElevationChart: FC<ElevationChartProps> = ({ route }) => {
           ticks: {
             autoSkip: true,
             maxTicksLimit: 4,
-          },
-          grid: {
-            drawBorder: false,
           },
         },
       },
@@ -174,32 +184,24 @@ const ElevationChart: FC<ElevationChartProps> = ({ route }) => {
 };
 
 function toRgba(hex: string, alpha: number): string {
-  const normalized = hex.trim().replace("#", "");
-  if (normalized.length !== 3 && normalized.length !== 6) {
-    return `rgba(0, 255, 255, ${alpha})`;
-  }
+  const cleaned = hex.replace("#", "");
+  if (cleaned.length !== 3 && cleaned.length !== 6)
+    return `rgba(0,255,255,${alpha})`;
 
   const expanded =
-    normalized.length === 3
-      ? normalized
+    cleaned.length === 3
+      ? cleaned
           .split("")
           .map((c) => c + c)
           .join("")
-      : normalized;
+      : cleaned;
 
   const r = Number.parseInt(expanded.slice(0, 2), 16);
   const g = Number.parseInt(expanded.slice(2, 4), 16);
   const b = Number.parseInt(expanded.slice(4, 6), 16);
 
-  if (
-    Number.isNaN(r) ||
-    Number.isNaN(g) ||
-    Number.isNaN(b) ||
-    alpha < 0 ||
-    alpha > 1
-  ) {
-    return `rgba(0, 255, 255, ${alpha})`;
-  }
+  if ([r, g, b].some((n) => Number.isNaN(n)))
+    return `rgba(0,255,255,${alpha})`;
 
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
