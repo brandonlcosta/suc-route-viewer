@@ -19,17 +19,19 @@ export default function App() {
       setEvents(loaded);
 
       if (loaded.length > 0) {
-        const ev = loaded[0];
-        setActiveEventId(ev.eventId);
-        setSelectedRouteId(ev.routes[0]?.id ?? null);
+        const firstEvent = loaded[0];
+        setActiveEventId(firstEvent.eventId);
+        setSelectedRouteId(firstEvent.routes[0]?.id ?? null);
       }
     }
 
     init();
   }, []);
 
+  const isLoading = events.length === 0;
+
   // Active event object
-  const activeEvent = useMemo(() => {
+  const activeEvent: SUCEvent | null = useMemo(() => {
     if (events.length === 0) return null;
     return events.find((e) => e.eventId === activeEventId) ?? events[0];
   }, [events, activeEventId]);
@@ -49,24 +51,24 @@ export default function App() {
     setActiveEventId(eventId);
 
     const ev = events.find((e) => e.eventId === eventId);
-    setSelectedRouteId(ev?.routes[0]?.id ?? null);
+    const firstRoute = ev?.routes[0];
+    setSelectedRouteId(firstRoute ? firstRoute.id : null);
   };
 
   // Route switch
-  const handleRouteSelect = (id: string) => {
-    setSelectedRouteId(id);
+  const handleRouteSelect = (routeId: string) => {
+    setSelectedRouteId(routeId);
   };
 
   return (
     <div className="suc-app">
-
       {/* HEADER */}
       <header className="suc-header suc-header--compact">
         <div className="suc-header-left">
           <div className="suc-header-row">
-            {events.length === 0 && <span>Loading Events…</span>}
+            {isLoading && <span>Loading events…</span>}
 
-            {events.length > 0 && activeEvent && (
+            {!isLoading && activeEvent && (
               <select
                 className="suc-event-select suc-event-select--compact"
                 value={activeEvent.eventId}
@@ -89,13 +91,17 @@ export default function App() {
 
               <span className="suc-event-datetime">
                 {activeEvent.eventDate && (
-                  <span className="suc-event-date">{activeEvent.eventDate}</span>
+                  <span className="suc-event-date">
+                    {activeEvent.eventDate}
+                  </span>
                 )}
                 {activeEvent.eventDate && activeEvent.eventTime && (
                   <span className="suc-event-dot">•</span>
                 )}
                 {activeEvent.eventTime && (
-                  <span className="suc-event-time">{activeEvent.eventTime}</span>
+                  <span className="suc-event-time">
+                    {activeEvent.eventTime}
+                  </span>
                 )}
               </span>
             </div>
@@ -118,10 +124,7 @@ export default function App() {
         <section className="suc-map-shell">
           <div className="suc-map-panel">
             <div className="suc-map-container">
-              <MultiRouteMap
-                event={activeEvent}
-                selectedRoute={selectedRoute}
-              />
+              <MultiRouteMap event={activeEvent} selectedRoute={selectedRoute} />
             </div>
           </div>
         </section>
@@ -129,12 +132,13 @@ export default function App() {
         {/* ROUTES + DETAILS */}
         {activeEvent && (
           <section className="suc-routelist-shell">
+            {/* Route Tabs */}
             <div className="suc-route-tabs">
               {activeEvent.routes.map((route) => (
                 <button
                   key={route.id}
                   type="button"
-                  className={`suc-route-tab-btn ${
+                  className={`suc-route-tab-btn ${route.label} ${
                     route.id === selectedRouteId ? "is-selected" : ""
                   }`}
                   onClick={() => handleRouteSelect(route.id)}
@@ -147,10 +151,13 @@ export default function App() {
               ))}
             </div>
 
+            {/* Detail Card */}
             {selectedRoute && (
               <div className="suc-route-detail">
                 <div className="suc-route-detail-header">
-                  <span className={`suc-route-tag suc-route-tag-${selectedRoute.label}`}>
+                  <span
+                    className={`suc-route-tag suc-route-tag-${selectedRoute.label}`}
+                  >
                     {selectedRoute.label}
                   </span>
 
@@ -160,7 +167,10 @@ export default function App() {
                     </span>
                     <span className="suc-route-detail-stats">
                       {selectedRoute.distanceMi.toFixed(1)} mi ·{" "}
-                      {Math.round(selectedRoute.elevationFt).toLocaleString()} ft ↑
+                      {Math.round(
+                        selectedRoute.elevationFt
+                      ).toLocaleString()}{" "}
+                      ft ↑
                     </span>
                   </div>
                 </div>
