@@ -1,6 +1,6 @@
 // src/components/ElevationChart.tsx
 //
-// Elevation profile for the selected SUC route.
+// Elevation chart for the selected SUC route.
 // Converts stored meter-based series into:
 //   • miles (x-axis)
 //   • feet (y-axis, rounded)
@@ -51,10 +51,10 @@ const ElevationChart: FC<ElevationChartProps> = ({ route }) => {
 
     // Convert meters → miles / feet
     const distMi = distM.map((m) =>
-      Number.isFinite(m) ? (m as number) / METERS_PER_MILE : m,
+      Number.isFinite(m) ? (m as number) / METERS_PER_MILE : m
     );
     const elevFt = elevM.map((m) =>
-      Number.isFinite(m) ? Math.round((m as number) * FEET_PER_METER) : m,
+      Number.isFinite(m) ? Math.round((m as number) * FEET_PER_METER) : m
     );
 
     const validSeries =
@@ -69,7 +69,7 @@ const ElevationChart: FC<ElevationChartProps> = ({ route }) => {
     }
 
     const labels = distMi.map((d) =>
-      Number.isFinite(d) ? Number((d as number).toFixed(1)) : d,
+      Number.isFinite(d) ? Number((d as number).toFixed(1)) : d
     );
 
     const chartData: ChartData<"line"> = {
@@ -151,20 +151,19 @@ const ElevationChart: FC<ElevationChartProps> = ({ route }) => {
   return (
     <div className="suc-elevation-card">
       <div className="suc-elevation-header">
-        <div className="suc-elevation-title">
-          Elevation Profile
-          {route && (
+        {route && (
+          <div className="suc-elevation-title">
             <span className="suc-elevation-meta">
               {route.distanceMi.toFixed(1)} mi ·{" "}
               {Math.round(route.elevationFt).toLocaleString()} ft gain
             </span>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {!route && (
         <div className="suc-elevation-empty">
-          Select a route to view its elevation profile.
+          Select a route to view its elevation.
         </div>
       )}
 
