@@ -1,31 +1,27 @@
 /**
- * src/data/loadEvents.ts
+ * src/data/loadEvents.ts — SUC HQ Unified Loader (v2.0)
  *
- * Purpose:
- *  - Load multi-event data produced by the A3 GPX converter.
- *  - Load events.json → route-level stats JSON → route GeoJSON linework.
- *  - Normalize into strict TypeScript structures.
- *
- * Inputs (static):
- *  - /public/events.json
- *  - /public/routes/<routeId>.json
- *  - /public/routes/<routeId>.geojson
- *
- * Outputs (frontend):
- *  - SUCEventCatalog
- *  - SUCEvent
- *  - SUCRoute
+ * Responsibilities:
+ *  - Load multi-event catalog (/events.json)
+ *  - Load per-route stats JSON + GeoJSON linework
+ *  - Normalize into strict SUCEvent / SUCRoute structures
+ *  - Provide safe, deterministic ordering every time
  *
  * Notes:
- *  - All fetches are done client-side.
- *  - Missing JSON/GeoJSON files are handled gracefully.
- *  - Ensures deterministic ordering of events and routes.
+ *  - This is a frontend-only loader (no server).
+ *  - Fails gracefully on missing files.
+ *  - 100% compatible with the new Unified Route Map engine.
  */
 
-/** Route as consumed by the frontend UI */
+//
+// ─────────────────────────────────────────────────────────────
+// Types exposed to application
+// ─────────────────────────────────────────────────────────────
+//
+
 export interface SUCRoute {
   id: string;
-  label: "MED" | "LRG" | "XL" | "XXL" | string;
+  label: "MED" | "LRG" | "XL" | "XXL";
   name: string;
   description: string;
   color: string;
@@ -45,33 +41,30 @@ export interface SUCRoute {
   geojson: GeoJSON.FeatureCollection | null;
 }
 
-/** Event as consumed by the frontend UI */
 export interface SUCEvent {
   eventId: string;
   eventName: string;
   eventDescription: string;
-  /** Optional event date string straight from events.json / event.json */
   eventDate?: string;
-  /** Optional event time string straight from events.json / event.json */
   eventTime?: string;
+
   routes: SUCRoute[];
 }
 
 export type SUCEventCatalog = SUCEvent[];
 
-/**
- * Shape of each route reference inside /events.json
- * (points to the route-level stats + geojson files)
- */
+//
+// ─────────────────────────────────────────────────────────────
+// Types for raw files inside /public/events.json
+// ─────────────────────────────────────────────────────────────
+//
+
 interface EventsIndexRouteRef {
-  label: string;
-  statsUrl: string;
-  geojsonUrl: string;
+  label: string;      // "XL", "MED", etc.
+  statsUrl: string;   // /routes/<id>.json
+  geojsonUrl: string; // /routes/<id>.geojson
 }
 
-/**
- * Shape of each event row inside /events.json
- */
 interface EventsIndexEvent {
   eventId: string;
   eventName: string;
@@ -81,10 +74,12 @@ interface EventsIndexEvent {
   routes: EventsIndexRouteRef[];
 }
 
-/**
- * Shape of the route-level stats JSON
- * (/public/routes/<routeId>.json)
- */
+//
+// ─────────────────────────────────────────────────────────────
+// Types for per-route stats JSON (/routes/<id>.json)
+// ─────────────────────────────────────────────────────────────
+//
+
 interface RouteStats {
   id: string;
   label: string;
@@ -105,12 +100,15 @@ interface RouteStats {
   elevationSeries: number[];
 }
 
-/**
- * Load JSON helper
- */
+//
+// ─────────────────────────────────────────────────────────────
+// Safe JSON loader
+// ─────────────────────────────────────────────────────────────
+//
+
 async function loadJSON<T>(url: string): Promise<T | null> {
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) return null;
     return (await res.json()) as T;
   } catch {
@@ -118,14 +116,11 @@ async function loadJSON<T>(url: string): Promise<T | null> {
   }
 }
 
-/**
- * Load GeoJSON helper
- */
 async function loadGeoJSON(
   url: string
 ): Promise<GeoJSON.FeatureCollection | null> {
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) return null;
     return (await res.json()) as GeoJSON.FeatureCollection;
   } catch {
@@ -133,11 +128,31 @@ async function loadGeoJSON(
   }
 }
 
-/**
- * Load all route-level data:
- *  - stats JSON
- *  - geojson linework
- */
+//
+// ─────────────────────────────────────────────────────────────
+// Normalize route labels → strict MED/LRG/XL/XXL
+// ─────────────────────────────────────────────────────────────
+//
+
+function normalizeLabel(raw: string): "MED" | "LRG" | "XL" | "XXL" {
+  const s = raw.toLowerCase();
+
+  if (s.includes("xxl")) return "XXL";
+  if (s.includes("xl")) return "XL";
+  if (s.includes("lrg") || s.includes("large")) return "LRG";
+  if (s.includes("med") || s.includes("medium")) return "MED";
+
+  // fallback: treat unknown as XL but log for debugging
+  console.warn("[SUC] Unknown route label:", raw, "→ defaulting to XL");
+  return "XL";
+}
+
+//
+// ─────────────────────────────────────────────────────────────
+// Load full route payload (stats + geojson)
+// ─────────────────────────────────────────────────────────────
+//
+
 async function loadRoute(
   routeMeta: EventsIndexRouteRef
 ): Promise<SUCRoute | null> {
@@ -148,7 +163,9 @@ async function loadRoute(
 
   return {
     id: stats.id,
-    label: stats.label,
+
+    // normalized and safe
+    label: normalizeLabel(stats.label),
     name: stats.name,
     description: stats.description,
     color: stats.color,
@@ -162,16 +179,19 @@ async function loadRoute(
     elevationFt: stats.elevationFt,
     elevationM: stats.elevationM,
 
-    distanceSeries: stats.distanceSeries,
-    elevationSeries: stats.elevationSeries,
+    distanceSeries: stats.distanceSeries ?? [],
+    elevationSeries: stats.elevationSeries ?? [],
 
     geojson,
   };
 }
 
-/**
- * Load all events + their routes
- */
+//
+// ─────────────────────────────────────────────────────────────
+// Load the entire SUC event catalog
+// ─────────────────────────────────────────────────────────────
+//
+
 export async function loadSUCEvents(): Promise<SUCEventCatalog> {
   const events = await loadJSON<EventsIndexEvent[]>("/events.json");
   if (!events || !Array.isArray(events)) return [];
@@ -181,15 +201,16 @@ export async function loadSUCEvents(): Promise<SUCEventCatalog> {
   for (const ev of events) {
     const loadedRoutes: SUCRoute[] = [];
 
-    // Load each referenced route
     for (const routeRef of ev.routes) {
-      const loaded = await loadRoute(routeRef);
-      if (loaded) loadedRoutes.push(loaded);
+      const route = await loadRoute(routeRef);
+      if (route) loadedRoutes.push(route);
     }
 
+    //
     // Deterministic route ordering:
-    //  - shortest distance on the left
-    //  - fall back to label ordering if distances are equal/missing
+    //   1) Shortest distance first
+    //   2) If tie → alphabetical label
+    //
     loadedRoutes.sort((a, b) => {
       const da = Number.isFinite(a.distanceMi) ? a.distanceMi : Infinity;
       const db = Number.isFinite(b.distanceMi) ? b.distanceMi : Infinity;
@@ -208,7 +229,9 @@ export async function loadSUCEvents(): Promise<SUCEventCatalog> {
     });
   }
 
-  // Deterministic event ordering
+  //
+  // Sort events in deterministic order — lexicographically by eventId
+  //
   catalog.sort((a, b) => a.eventId.localeCompare(b.eventId));
 
   return catalog;

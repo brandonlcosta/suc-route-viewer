@@ -1,4 +1,4 @@
-// src/App.tsx — SUC Route Viewer (Clean + Correct Map Updating)
+// src/App.tsx — SUC Route Viewer (Unified Map Interaction)
 
 import { useEffect, useMemo, useState } from "react";
 import MultiRouteMap from "./components/MultiRouteMap";
@@ -12,31 +12,29 @@ export default function App() {
   const [activeEventId, setActiveEventId] = useState<string | null>(null);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
 
-  // Load events on mount
+  // Load event data on mount
   useEffect(() => {
     async function init() {
       const loaded = await loadSUCEvents();
       setEvents(loaded);
 
       if (loaded.length > 0) {
-        const firstEvent = loaded[0];
-        setActiveEventId(firstEvent.eventId);
-
-        if (firstEvent.routes.length > 0) {
-          setSelectedRouteId(firstEvent.routes[0].id);
-        }
+        const ev = loaded[0];
+        setActiveEventId(ev.eventId);
+        setSelectedRouteId(ev.routes[0]?.id ?? null);
       }
     }
+
     init();
   }, []);
 
-  // Retrieve active event
-  const activeEvent: SUCEvent | null = useMemo(() => {
+  // Active event object
+  const activeEvent = useMemo(() => {
     if (events.length === 0) return null;
     return events.find((e) => e.eventId === activeEventId) ?? events[0];
   }, [events, activeEventId]);
 
-  // Retrieve selected route
+  // Selected route object
   const selectedRoute: SUCRoute | null = useMemo(() => {
     if (!activeEvent) return null;
     return (
@@ -46,24 +44,22 @@ export default function App() {
     );
   }, [activeEvent, selectedRouteId]);
 
-  // Event change
+  // Event switch
   const handleEventSelect = (eventId: string) => {
     setActiveEventId(eventId);
 
     const ev = events.find((e) => e.eventId === eventId);
-    const firstRoute = ev?.routes[0];
-    setSelectedRouteId(firstRoute ? firstRoute.id : null);
+    setSelectedRouteId(ev?.routes[0]?.id ?? null);
   };
 
-  // Route tab change
-  const handleRouteSelect = (route: SUCRoute) => {
-    setSelectedRouteId(route.id);
+  // Route switch
+  const handleRouteSelect = (id: string) => {
+    setSelectedRouteId(id);
   };
-
-  const tag = selectedRoute ? getRouteTag(selectedRoute) : null;
 
   return (
     <div className="suc-app">
+
       {/* HEADER */}
       <header className="suc-header suc-header--compact">
         <div className="suc-header-left">
@@ -90,6 +86,7 @@ export default function App() {
               <span className="suc-event-description">
                 {activeEvent.eventDescription}
               </span>
+
               <span className="suc-event-datetime">
                 {activeEvent.eventDate && (
                   <span className="suc-event-date">{activeEvent.eventDate}</span>
@@ -98,9 +95,7 @@ export default function App() {
                   <span className="suc-event-dot">•</span>
                 )}
                 {activeEvent.eventTime && (
-                  <span className="suc-event-time">
-                    {activeEvent.eventTime}
-                  </span>
+                  <span className="suc-event-time">{activeEvent.eventTime}</span>
                 )}
               </span>
             </div>
@@ -117,15 +112,13 @@ export default function App() {
         </div>
       </header>
 
-      {/* MAIN LAYOUT */}
+      {/* MAIN */}
       <main className="suc-main-vertical">
-        {/* MAP */}
+        {/* MAP PANEL */}
         <section className="suc-map-shell">
           <div className="suc-map-panel">
             <div className="suc-map-container">
-              {/* Key ensures map updates cleanly when routes change */}
               <MultiRouteMap
-                key={selectedRoute?.id}
                 event={activeEvent}
                 selectedRoute={selectedRoute}
               />
@@ -133,44 +126,33 @@ export default function App() {
           </div>
         </section>
 
-        {/* ROUTES + DETAIL */}
+        {/* ROUTES + DETAILS */}
         {activeEvent && (
           <section className="suc-routelist-shell">
-            {/* Route Tabs */}
             <div className="suc-route-tabs">
-              {activeEvent.routes.map((route) => {
-                const isSelected = route.id === selectedRouteId;
-                const routeTag = getRouteTag(route);
-
-                return (
-                  <button
-                    key={route.id}
-                    type="button"
-                    className={`suc-route-tab-btn ${routeTag ?? ""} ${
-                      isSelected ? "is-selected" : ""
-                    }`}
-                    onClick={() => handleRouteSelect(route)}
-                  >
-                    {routeTag && (
-                      <span className="suc-route-tab-label">{routeTag}</span>
-                    )}
-                    <span className="suc-route-tab-distance">
-                      {route.distanceMi.toFixed(1)} mi
-                    </span>
-                  </button>
-                );
-              })}
+              {activeEvent.routes.map((route) => (
+                <button
+                  key={route.id}
+                  type="button"
+                  className={`suc-route-tab-btn ${
+                    route.id === selectedRouteId ? "is-selected" : ""
+                  }`}
+                  onClick={() => handleRouteSelect(route.id)}
+                >
+                  <span className="suc-route-tab-label">{route.label}</span>
+                  <span className="suc-route-tab-distance">
+                    {route.distanceMi.toFixed(1)} mi
+                  </span>
+                </button>
+              ))}
             </div>
 
-            {/* Detail Card */}
             {selectedRoute && (
               <div className="suc-route-detail">
                 <div className="suc-route-detail-header">
-                  {tag && (
-                    <span className={`suc-route-tag suc-route-tag-${tag}`}>
-                      {tag}
-                    </span>
-                  )}
+                  <span className={`suc-route-tag suc-route-tag-${selectedRoute.label}`}>
+                    {selectedRoute.label}
+                  </span>
 
                   <div className="suc-route-detail-titleblock">
                     <span className="suc-route-detail-name">
@@ -207,16 +189,4 @@ export default function App() {
       </footer>
     </div>
   );
-}
-
-/** Route tag classification */
-function getRouteTag(route: SUCRoute): string | null {
-  const n = route.name.toLowerCase();
-
-  if (n.includes("xxl")) return "XXL";
-  if (n.includes("xl")) return "XL";
-  if (n.includes("med") || n.includes("medium")) return "MED";
-  if (n.includes("lrg") || n.includes("large")) return "LRG";
-
-  return null;
 }

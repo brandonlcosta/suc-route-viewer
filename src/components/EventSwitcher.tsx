@@ -1,12 +1,18 @@
-import { } from "react";
+// src/components/EventSwitcher.tsx
+//
+// Sidebar-style event + route switcher for SUC HQ
+// - No Tailwind, just semantic classNames
+// - Works with SUCEvent / SUCRoute
+// - Designed to sit alongside the main map layout (desktop use)
+
 import type { SUCEvent, SUCRoute } from "../data/loadEvents";
 
 interface Props {
   events: SUCEvent[];
   activeEvent: SUCEvent | null;
   selectedRoute: SUCRoute | null;
-  onEventSelect: (ev: SUCEvent) => void;
-  onRouteSelect: (route: SUCRoute) => void;
+  onEventSelect: (eventId: string) => void;
+  onRouteSelect: (routeId: string) => void;
 }
 
 export default function EventSwitcher({
@@ -17,78 +23,96 @@ export default function EventSwitcher({
   onRouteSelect,
 }: Props) {
   return (
-    <div className="h-full w-80 bg-black text-white overflow-y-auto p-4 space-y-6 border-r border-neutral-800">
-      {/* Event List */}
-      <div>
-        <h2 className="text-xl font-semibold mb-3">Events</h2>
-        <div className="space-y-2">
+    <aside className="suc-sidebar">
+      {/* Events */}
+      <section className="suc-sidebar-section">
+        <h2 className="suc-sidebar-heading">Events</h2>
+        <div className="suc-sidebar-list">
           {events.map((ev) => {
             const isActive = activeEvent?.eventId === ev.eventId;
             return (
               <button
                 key={ev.eventId}
-                onClick={() => onEventSelect(ev)}
-                className={`w-full text-left p-3 rounded-xl border transition duration-150 ${
-                  isActive
-                    ? "bg-neutral-800 border-accent-2 shadow-lg shadow-accent-2/20"
-                    : "bg-neutral-900 border-neutral-700 hover:border-neutral-500 hover:bg-neutral-800"
+                type="button"
+                onClick={() => onEventSelect(ev.eventId)}
+                className={`suc-sidebar-event ${
+                  isActive ? "is-active" : ""
                 }`}
               >
-                <div className="font-medium text-base">{ev.eventName}</div>
+                <div className="suc-sidebar-event-title">{ev.eventName}</div>
+
                 {ev.eventDescription && (
-                  <div className="text-sm text-neutral-400 mt-1 line-clamp-2">
+                  <div className="suc-sidebar-event-description">
                     {ev.eventDescription}
+                  </div>
+                )}
+
+                {(ev.eventDate || ev.eventTime) && (
+                  <div className="suc-sidebar-event-meta">
+                    {ev.eventDate && (
+                      <span className="suc-sidebar-event-date">
+                        {ev.eventDate}
+                      </span>
+                    )}
+                    {ev.eventDate && ev.eventTime && (
+                      <span className="suc-sidebar-dot">•</span>
+                    )}
+                    {ev.eventTime && (
+                      <span className="suc-sidebar-event-time">
+                        {ev.eventTime}
+                      </span>
+                    )}
                   </div>
                 )}
               </button>
             );
           })}
         </div>
-      </div>
+      </section>
 
-      {/* Route List */}
+      {/* Routes for active event */}
       {activeEvent && (
-        <div>
-          <h2 className="text-xl font-semibold mb-3">Routes</h2>
-          <div className="space-y-2">
+        <section className="suc-sidebar-section">
+          <h2 className="suc-sidebar-heading">Routes</h2>
+          <div className="suc-sidebar-list">
             {activeEvent.routes.map((route) => {
               const isSelected = selectedRoute?.id === route.id;
               return (
                 <button
                   key={route.id}
-                  onClick={() => onRouteSelect(route)}
-                  className={`w-full text-left p-3 rounded-xl border flex flex-col transition duration-150 ${
-                    isSelected
-                      ? "bg-neutral-800 border-accent-3 shadow-lg shadow-accent-3/20"
-                      : "bg-neutral-900 border-neutral-700 hover:border-neutral-500 hover:bg-neutral-800"
+                  type="button"
+                  onClick={() => onRouteSelect(route.id)}
+                  className={`suc-sidebar-route ${
+                    isSelected ? "is-active" : ""
                   }`}
                 >
-                  <div className="flex items-center justify-between mb-1">
-                    <div
-                      className="font-medium"
+                  <div className="suc-sidebar-route-header">
+                    <span
+                      className="suc-sidebar-route-name"
                       style={{ color: route.color }}
                     >
                       {route.name}
-                    </div>
-                    <span className="text-xs text-neutral-400 tracking-wide">
+                    </span>
+                    <span className="suc-sidebar-route-label">
                       {route.label}
                     </span>
                   </div>
 
                   {route.description && (
-                    <div className="text-sm text-neutral-400 mb-1 line-clamp-2">
+                    <div className="suc-sidebar-route-description">
                       {route.description}
                     </div>
                   )}
 
-                  <div className="text-xs text-neutral-500">
-                    {route.distanceMi.toFixed(1)} mi · {Math.round(route.elevationFt)} ft
+                  <div className="suc-sidebar-route-meta">
+                    {route.distanceMi.toFixed(1)} mi ·{" "}
+                    {Math.round(route.elevationFt).toLocaleString()} ft ↑
                   </div>
 
                   <a
                     href={route.gpxUrl}
                     download
-                    className="text-xs mt-2 text-accent-2 hover:underline self-start"
+                    className="suc-sidebar-route-link"
                     onClick={(e) => e.stopPropagation()}
                   >
                     Download GPX
@@ -97,8 +121,8 @@ export default function EventSwitcher({
               );
             })}
           </div>
-        </div>
+        </section>
       )}
-    </div>
+    </aside>
   );
 }

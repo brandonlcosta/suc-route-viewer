@@ -1,28 +1,33 @@
+/* ======================================================
+   SUC APP — Cosmic Neon UI v2.1
+   Structured, optimized, map-safe, neon-polished system
+====================================================== */
+
 /* ------------------------------------------------------
-   SUC APP — Cosmic Neon UI
-   Fully rewritten, polished, cohesive aesthetic
+   ROOT & GLOBAL COLOR SYSTEM
 ------------------------------------------------------ */
 
-/* ROOT & GLOBAL -------------------------------------- */
-
 :root {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
-    sans-serif;
-
   --bg-deep: #05050a;
   --bg-panel: rgba(8, 10, 22, 0.9);
   --bg-glass: rgba(8, 12, 30, 0.55);
 
   --fg-primary: #f5f5ff;
-  --fg-muted: rgba(220, 220, 255, 0.7);
+  --fg-muted: rgba(220, 220, 255, 0.72);
 
-  --border-soft: rgba(70, 70, 120, 0.7);
+  --border-soft: rgba(70, 70, 120, 0.65);
   --border-glow: rgba(120, 150, 255, 0.22);
 
   --accent-cyan: #00b4ff;
   --accent-aqua: #00ffaa;
   --accent-purple: #d000ff;
   --accent-red: #ff5050;
+
+  --shadow-neon-cyan: 0 0 22px rgba(0, 180, 255, 0.18);
+  --shadow-neon-cyan-strong: 0 0 28px rgba(0, 180, 255, 0.32);
+
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    sans-serif;
 
   background: var(--bg-deep);
   color: var(--fg-primary);
@@ -31,47 +36,44 @@
 html,
 body,
 #root {
+  height: 100%;
   margin: 0;
   padding: 0;
-  height: 100%;
   overflow-x: hidden;
 }
 
 body {
-  background: radial-gradient(circle at top, #151530 0%, #040408 65%);
+  background: radial-gradient(circle at top, #161630 0%, #030308 65%);
 }
 
-/* APP SHELL ------------------------------------------ */
+/* ------------------------------------------------------
+   APP SHELL
+------------------------------------------------------ */
 
 .suc-app {
-  min-height: 100vh;
   display: flex;
   flex-direction: column;
+  min-height: 100vh;
 }
 
-/* HEADER --------------------------------------------- */
+/* ------------------------------------------------------
+   HEADER
+------------------------------------------------------ */
 
 .suc-header {
   padding: 0.65rem 1.2rem;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 0.75rem;
+  justify-content: space-between;
+
+  background: rgba(10, 12, 22, 0.8);
+  backdrop-filter: blur(14px);
 
   border-bottom: 1px solid rgba(80, 80, 130, 0.6);
-  background: rgba(10, 12, 22, 0.75);
-  backdrop-filter: blur(14px);
 }
 
 .suc-header--compact {
   padding-bottom: 0.4rem;
-}
-
-.suc-header h1 {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
 }
 
 .suc-header-meta {
@@ -79,7 +81,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
-  opacity: 0.8;
+  opacity: 0.85;
 }
 
 .suc-event-select {
@@ -94,17 +96,19 @@ body {
 }
 
 .suc-settings-btn {
-  padding: 0.3rem 0.7rem;
-  background: rgba(10, 12, 20, 0.9);
+  padding: 0.32rem 0.7rem;
+  background: rgba(10, 12, 22, 0.8);
   border-radius: 999px;
 
-  border: 1px solid rgba(110, 110, 200, 0.6);
+  border: 1px solid rgba(110, 110, 200, 0.55);
   color: var(--fg-primary);
 
   cursor: pointer;
 }
 
-/* MAIN LAYOUT ---------------------------------------- */
+/* ------------------------------------------------------
+   MAIN LAYOUT CONTAINER
+------------------------------------------------------ */
 
 .suc-main-vertical {
   flex: 1;
@@ -113,38 +117,21 @@ body {
   min-height: 0;
 }
 
-/* MAP REGION ----------------------------------------- */
+/* ------------------------------------------------------
+   MAP REGION
+------------------------------------------------------ */
 
 .suc-map-shell {
   position: relative;
+  height: clamp(300px, 55vh, 660px);
   min-height: 300px;
-  height: clamp(300px, 55vh, 640px);
 }
 
 .suc-map-panel {
-  position: relative;
   width: 100%;
   height: 100%;
   display: flex;
   flex-direction: column;
-}
-
-/* Map header text spacing */
-.suc-map-header {
-  gap: 0.6rem;
-  line-height: 1.2;
-}
-
-.suc-map-header h2 {
-  margin: 0;
-  line-height: 1.1;
-}
-
-.suc-map-route-meta {
-  display: flex;
-  align-items: baseline;
-  gap: 0.4rem;
-  font-size: 0.86rem;
 }
 
 .suc-map-container {
@@ -152,26 +139,24 @@ body {
   flex: 1;
 }
 
+/* Overwrite any MapLibre influence on layout */
 .suc-map-container .maplibregl-map {
-  width: 100%;
-  height: 100%;
+  position: absolute !important;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
 }
 
-/* ROUTE TABS ----------------------------------------- */
+/* ------------------------------------------------------
+   ROUTE TABS (Top Pills)
+------------------------------------------------------ */
 
 .suc-routelist-shell {
   padding: 0.65rem 1.1rem 1rem;
-  border-top: 1px solid rgba(80, 80, 130, 0.55);
   background: rgba(5, 7, 16, 0.9);
   backdrop-filter: blur(10px);
-}
 
-.suc-routelist-shell h2 {
-  margin: 0 0 0.4rem;
-  font-size: 0.9rem;
-  text-transform: uppercase;
-  opacity: 0.7;
-  letter-spacing: 0.08em;
+  border-top: 1px solid rgba(80, 80, 130, 0.55);
 }
 
 .suc-route-tabs {
@@ -185,7 +170,7 @@ body {
   display: none;
 }
 
-/* Route buttons — neon pills */
+/* Neon pill buttons */
 .suc-route-tab-btn {
   flex: 1 1 0;
   padding: 0.28rem 0.65rem;
@@ -205,9 +190,9 @@ body {
   color: var(--fg-primary);
 
   transition:
-    transform 0.12s ease,
-    border-color 0.15s ease,
-    background 0.15s ease;
+    transform 0.14s ease,
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .suc-route-tab-btn:hover {
@@ -216,16 +201,16 @@ body {
 
 /* Selected */
 .suc-route-tab-btn.is-selected {
-  background: rgba(10, 14, 32, 0.95);
+  background: rgba(10, 14, 36, 0.95);
   border-color: #fff;
 }
 
-/* Route colors */
-.suc-route-tab-btn.LRG {
-  border-color: var(--accent-cyan);
-}
+/* Label-colored borders */
 .suc-route-tab-btn.MED {
   border-color: var(--accent-aqua);
+}
+.suc-route-tab-btn.LRG {
+  border-color: var(--accent-cyan);
 }
 .suc-route-tab-btn.XL {
   border-color: var(--accent-purple);
@@ -234,18 +219,20 @@ body {
   border-color: var(--accent-red);
 }
 
-/* ROUTE DETAIL ---------------------------------------- */
+/* ------------------------------------------------------
+   ROUTE DETAIL CARD
+------------------------------------------------------ */
 
 .suc-route-detail {
-  margin-top: 0.65rem;
-  padding: 0.9rem 1rem;
-  border-radius: 1rem;
+  margin-top: 0.7rem;
+  padding: 1rem;
 
   background: var(--bg-panel);
   backdrop-filter: blur(12px);
+  border-radius: 1rem;
 
   border: 1px solid var(--border-soft);
-  box-shadow: 0 0 22px rgba(0, 200, 255, 0.15);
+  box-shadow: var(--shadow-neon-cyan);
 }
 
 .suc-route-detail-header {
@@ -260,41 +247,37 @@ body {
 
 .suc-route-detail-stats {
   margin-top: 0.1rem;
-  line-height: 1.2;
+  opacity: 0.9;
 }
 
 .suc-route-detail-description {
-  margin: 0.55rem 0 0.3rem;
+  margin-top: 0.55rem;
+  opacity: 0.9;
   font-size: 0.86rem;
-  opacity: 0.88;
 }
 
-/* ELEVATION ------------------------------------------- */
+/* ------------------------------------------------------
+   ELEVATION CARD
+------------------------------------------------------ */
 
 .suc-elevation-card {
-  margin-top: 0.65rem;
-  padding: 0.75rem 1rem;
+  margin-top: 0.75rem;
+  padding: 0.8rem 1rem;
 
-  background: rgba(8, 12, 30, 0.8);
+  background: rgba(8, 12, 30, 0.82);
   backdrop-filter: blur(12px);
+
   border-radius: 0.85rem;
 
-  border: 1px solid rgba(90, 90, 160, 0.7);
-  box-shadow: 0 0 18px rgba(0, 180, 255, 0.25);
+  border: 1px solid rgba(90, 90, 160, 0.65);
+  box-shadow: var(--shadow-neon-cyan-strong);
 }
 
 .suc-elevation-title {
   font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  font-weight: 600;
-  opacity: 0.85;
-}
-
-.suc-elevation-meta {
-  margin-left: 0.4rem;
-  font-size: 0.75rem;
-  opacity: 0.75;
+  opacity: 0.9;
 }
 
 .suc-elevation-chart-shell {
@@ -302,13 +285,15 @@ body {
   margin-top: 0.3rem;
 }
 
-/* MAP CONTROLS — FULLY CUSTOM ------------------------- */
+/* ------------------------------------------------------
+   MAP CONTROLS (CUSTOM)
+------------------------------------------------------ */
 
 .suc-map-container .maplibregl-ctrl-top-left {
-  position: absolute;
-  top: 14px;
-  left: 14px;
-  z-index: 50;
+  position: absolute !important;
+  top: 14px !important;
+  left: 14px !important;
+  z-index: 40;
 }
 
 .suc-map-container .maplibregl-ctrl-compass {
@@ -316,23 +301,23 @@ body {
 }
 
 .suc-map-container .maplibregl-ctrl-group {
-  background: rgba(8, 12, 30, 0.65);
+  background: rgba(10, 12, 28, 0.65);
   backdrop-filter: blur(8px);
 
   border-radius: 14px;
-  overflow: hidden;
-
   border: 1px solid var(--border-glow);
+
   box-shadow:
-    0 0 12px rgba(0, 180, 255, 0.25),
-    0 0 22px rgba(0, 180, 255, 0.08);
+    0 0 14px rgba(0, 180, 255, 0.25),
+    0 0 24px rgba(0, 180, 255, 0.08);
+
+  overflow: hidden;
 }
 
 .suc-map-container .maplibregl-ctrl-zoom-in,
 .suc-map-container .maplibregl-ctrl-zoom-out {
   width: 36px;
   height: 34px;
-  padding: 0;
 
   background: transparent;
   color: var(--fg-primary);
@@ -342,46 +327,41 @@ body {
   border: none !important;
   cursor: pointer;
 
-  transition:
-    background 0.2s ease,
-    box-shadow 0.2s ease;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
 }
 
 .suc-map-container .maplibregl-ctrl-zoom-in {
   border-bottom: 1px solid rgba(120, 150, 255, 0.15) !important;
 }
 
-/* Hover */
 .suc-map-container .maplibregl-ctrl-zoom-in:hover,
 .suc-map-container .maplibregl-ctrl-zoom-out:hover {
-  background: rgba(20, 25, 55, 0.9);
-
-  box-shadow:
-    inset 0 0 10px rgba(0, 200, 255, 0.22),
-    0 0 10px rgba(0, 180, 255, 0.35);
+  background: rgba(22, 26, 52, 0.9);
+  box-shadow: inset 0 0 12px rgba(0, 200, 255, 0.25);
 }
 
-/* Active */
 .suc-map-container .maplibregl-ctrl-zoom-in:active,
 .suc-map-container .maplibregl-ctrl-zoom-out:active {
-  background: rgba(28, 36, 75, 1);
-
+  background: rgba(30, 36, 72, 1);
   box-shadow:
     inset 0 0 14px rgba(0, 200, 255, 0.35),
-    0 0 18px rgba(0, 180, 255, 0.55);
+    0 0 16px rgba(0, 180, 255, 0.55);
 }
 
-/* FOOTER ---------------------------------------------- */
+/* ------------------------------------------------------
+   FOOTER
+------------------------------------------------------ */
 
 .suc-footer {
-  padding: 0.5rem 1.5rem;
+  padding: 0.55rem 1.4rem;
   border-top: 1px solid rgba(70, 70, 120, 0.55);
-
   font-size: 0.75rem;
   opacity: 0.7;
 }
 
-/* DESKTOP OPTIMIZATION -------------------------------- */
+/* ------------------------------------------------------
+   DESKTOP OPTIMIZATION
+------------------------------------------------------ */
 
 @media (min-width: 900px) {
   .suc-route-tabs {
@@ -390,37 +370,21 @@ body {
 }
 
 /* ------------------------------------------------------
-   FIX: Prevent map from expanding / pushing layout
+   MAP STRETCH FIX (critical)
 ------------------------------------------------------ */
 
-/* Force the map wrapper to never auto-expand */
 .suc-map-shell,
 .suc-map-panel,
 .suc-map-container {
   position: relative;
-  min-height: 0 !important;  /* KEY FIX */
-  overflow: hidden;          /* Prevent any internal push */
+  min-height: 0 !important;
+  overflow: hidden;
 }
 
-/* Ensure MapLibre's internal container cannot stretch the parent */
-.suc-map-container .maplibregl-map {
-  position: absolute !important;
-  top: 0; left: 0; right: 0; bottom: 0;
-  height: 100% !important;
-  width: 100% !important;
-}
-
-/* Disable MapLibre controls affecting layout */
 .maplibregl-ctrl,
 .maplibregl-ctrl-group,
 .maplibregl-ctrl-top-left {
   position: absolute !important;
-  inset: auto !important; /* Remove auto layout flow */
+  inset: auto !important;
   pointer-events: auto;
-}
-
-/* Keep your controls pinned where YOU want them */
-.suc-map-container .maplibregl-ctrl-top-left {
-  top: 14px !important;
-  left: 14px !important;
 }
