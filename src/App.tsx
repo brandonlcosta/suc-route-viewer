@@ -46,13 +46,6 @@ export default function App() {
     );
   }, [activeEvent, selectedRouteId]);
 
-  // Computed Google Maps link for start location
-  const startLocationUrl = useMemo(() => {
-    if (!activeEvent?.eventStartLocation) return null;
-    const q = encodeURIComponent(activeEvent.eventStartLocation);
-    return `https://www.google.com/maps/search/?api=1&query=${q}`;
-  }, [activeEvent?.eventStartLocation]);
-
   // Event switch
   const handleEventSelect = (eventId: string) => {
     setActiveEventId(eventId);
@@ -92,41 +85,56 @@ export default function App() {
 
           {activeEvent && (
             <div className="suc-header-meta">
-              <span className="suc-event-description">
-                {activeEvent.eventDescription}
-              </span>
+              {activeEvent.eventDescription && (
+                <span className="suc-event-description">
+                  {activeEvent.eventDescription}
+                </span>
+              )}
 
-              <span className="suc-event-datetime">
-                {activeEvent.eventDate && (
-                  <span className="suc-event-date">
-                    {activeEvent.eventDate}
-                  </span>
-                )}
-                {activeEvent.eventDate && activeEvent.eventTime && (
-                  <span className="suc-event-dot">•</span>
-                )}
-                {activeEvent.eventTime && (
-                  <span className="suc-event-time">
-                    {activeEvent.eventTime}
-                  </span>
-                )}
+              {(activeEvent.eventDate ||
+                activeEvent.eventTime ||
+                activeEvent.startLocationName) && (
+                <span className="suc-event-datetime">
+                  {activeEvent.eventDate && (
+                    <span className="suc-event-date">
+                      {activeEvent.eventDate}
+                    </span>
+                  )}
 
-                {activeEvent.eventStartLocation && startLocationUrl && (
-                  <>
-                    {(activeEvent.eventDate || activeEvent.eventTime) && (
-                      <span className="suc-event-dot">•</span>
-                    )}
-                    <a
-                      href={startLocationUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="suc-event-location"
-                    >
-                      Start: {activeEvent.eventStartLocation}
-                    </a>
-                  </>
-                )}
-              </span>
+                  {activeEvent.eventDate && activeEvent.eventTime && (
+                    <span className="suc-event-dot">•</span>
+                  )}
+
+                  {activeEvent.eventTime && (
+                    <span className="suc-event-time">
+                      {activeEvent.eventTime}
+                    </span>
+                  )}
+
+                  {activeEvent.startLocationName && (
+                    <>
+                      {(activeEvent.eventDate || activeEvent.eventTime) && (
+                        <span className="suc-event-dot">•</span>
+                      )}
+
+                      {activeEvent.startLocationUrl ? (
+                        <a
+                          href={activeEvent.startLocationUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="suc-event-location"
+                        >
+                          Start: {activeEvent.startLocationName}
+                        </a>
+                      ) : (
+                        <span className="suc-event-location">
+                          Start: {activeEvent.startLocationName}
+                        </span>
+                      )}
+                    </>
+                  )}
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -187,7 +195,10 @@ export default function App() {
                   <div className="suc-route-detail-titleblock">
                     <span className="suc-route-detail-stats">
                       {selectedRoute.distanceMi.toFixed(1)} mi ·{" "}
-                      {Math.round(selectedRoute.elevationFt).toLocaleString()} ft ↑
+                      {Math.round(
+                        selectedRoute.elevationFt
+                      ).toLocaleString()}{" "}
+                      ft ↑
                     </span>
                   </div>
                 </div>

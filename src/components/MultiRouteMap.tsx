@@ -1,11 +1,10 @@
 // src/components/MultiRouteMap.tsx
 //
-// SUC Multi-Route Map — Dark Tactical Terrain Edition
-// - Full 3D terrain via Terrarium DEM (stable, free)
-// - Hillshade + tactical fog
-// - Neon route overlay
-// - No auto-fit on route switch
-// - Camera tilt/bearing enabled
+// SUC Multi-Route Map — Unified Event + Route Camera
+// - All routes for the active event are loaded as a faint underlay
+// - Selected route is drawn on top in neon
+// - Camera auto-fits to the event on event change
+// - Camera auto-fits to the selected route on route change
 
 import { useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
@@ -25,7 +24,6 @@ interface Props {
 export default function MultiRouteMap({ event, selectedRoute }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const hasInitialFit = useRef(false);
 
   function withStyleLoaded(map: maplibregl.Map, fn: () => void) {
     if (map.isStyleLoaded()) {
@@ -46,9 +44,9 @@ export default function MultiRouteMap({ event, selectedRoute }: Props) {
       style: "/dark-tactical-terrain.json",
       center: [-122.5, 37.7],
       zoom: 11,
-
       pitch: 35,
       bearing: -28,
+      antialias: true,
       attributionControl: false,
     });
 
@@ -69,7 +67,7 @@ export default function MultiRouteMap({ event, selectedRoute }: Props) {
     };
   }, []);
 
-  // 2. BASE ROUTE UNDERLAY (GREY)
+  // 2. BASE ROUTE UNDERLAY FOR ACTIVE EVENT + FIT TO EVENT
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !event) return;
@@ -90,6 +88,8 @@ export default function MultiRouteMap({ event, selectedRoute }: Props) {
         );
       });
 
+      if (features.length === 0) return;
+
       const merged: FeatureCollection<Geometry, GeoJsonProperties> = {
         type: "FeatureCollection",
         features,
@@ -103,36 +103,32 @@ export default function MultiRouteMap({ event, selectedRoute }: Props) {
         source: SRC,
         paint: {
           "line-color": "#7a7a96",
-          "line-width": 1.6,
-          "line-opacity": selectedRoute ? 0.0 : 0.36
+          "line-width": 1.4,
+          "line-opacity": 0.35,
+        },
+      });
+
+      // Fit camera to all routes in this event
+      const bounds = new maplibregl.LngLatBounds();
+      merged.features.forEach((f) => {
+        if (f.geometry?.type === "LineString") {
+          (f.geometry.coordinates as [number, number][]).forEach((c) =>
+            bounds.extend(c)
+          );
         }
       });
 
-      // Initial auto-fit
-      if (!hasInitialFit.current) {
-        const bounds = new maplibregl.LngLatBounds();
-        merged.features.forEach((f) => {
-          if (f.geometry?.type === "LineString") {
-            (f.geometry.coordinates as [number, number][]).forEach((c) =>
-              bounds.extend(c)
-            );
-          }
+      if (!bounds.isEmpty()) {
+        map.fitBounds(bounds, {
+          padding: 70,
+          maxZoom: 13,
+          duration: 900,
         });
-
-        if (!bounds.isEmpty()) {
-          map.fitBounds(bounds, {
-            padding: 70,
-            maxZoom: 13,
-            duration: 900,
-          });
-        }
-
-        hasInitialFit.current = true;
       }
     });
-  }, [event, selectedRoute]);
+  }, [event]);
 
-  // 3. SELECTED ROUTE (NEON)
+  // 3. SELECTED ROUTE HIGHLIGHT + FIT TO ROUTE
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -143,22 +139,16 @@ export default function MultiRouteMap({ event, selectedRoute }: Props) {
       const GLOW = "route-glow";
       const LINE = "route-line";
       const POI = "route-poi-layer";
-      const UNDERLAY = "routes-base-line";
 
-      // Cleanup
-      [GLOW, LINE, POI].forEach((l) => map.getLayer(l) && map.removeLayer(l));
-      [SRC, SRC_POI].forEach((s) => map.getSource(s) && map.removeSource(s));
+      // Cleanup previous selected route layers/sources
+      [GLOW, LINE, POI].forEach((id) => {
+        if (map.getLayer(id)) map.removeLayer(id);
+      });
+      [SRC, SRC_POI].forEach((id) => {
+        if (map.getSource(id)) map.removeSource(id);
+      });
 
-      if (!selectedRoute || !selectedRoute.geojson) {
-        if (map.getLayer(UNDERLAY)) {
-          map.setLayoutProperty(UNDERLAY, "visibility", "visible");
-        }
-        return;
-      }
-
-      if (map.getLayer(UNDERLAY)) {
-        map.setLayoutProperty(UNDERLAY, "visibility", "none");
-      }
+      if (!selectedRoute || !selectedRoute.geojson) return;
 
       const geo =
         selectedRoute.geojson as FeatureCollection<
@@ -168,7 +158,7 @@ export default function MultiRouteMap({ event, selectedRoute }: Props) {
 
       map.addSource(SRC, { type: "geojson", data: geo });
 
-      // Glow
+      // Glow layer
       map.addLayer({
         id: GLOW,
         type: "line",
@@ -181,7 +171,7 @@ export default function MultiRouteMap({ event, selectedRoute }: Props) {
         },
       });
 
-      // Crisp neon line
+      // Crisp neon center line
       map.addLayer({
         id: LINE,
         type: "line",
@@ -193,53 +183,66 @@ export default function MultiRouteMap({ event, selectedRoute }: Props) {
         },
       });
 
-      // Start/Finish
+      // Extract coords for start/finish + camera bounds
       const coords = geo.features
         .filter((f) => f.geometry?.type === "LineString")
-        .flatMap((f) => (f.geometry as any).coordinates) as [
-        number,
-        number
-      ][];
+        .flatMap(
+          (f) => (f.geometry as any).coordinates as [number, number][]
+        );
 
-      if (coords.length >= 2) {
-        map.addSource(SRC_POI, {
-          type: "geojson",
-          data: {
-            type: "FeatureCollection",
-            features: [
-              {
-                type: "Feature",
-                properties: { kind: "start" },
-                geometry: { type: "Point", coordinates: coords[0] }
+      if (coords.length === 0) return;
+
+      // Start / finish POIs
+      map.addSource(SRC_POI, {
+        type: "geojson",
+        data: {
+          type: "FeatureCollection",
+          features: [
+            {
+              type: "Feature",
+              properties: { kind: "start" },
+              geometry: { type: "Point", coordinates: coords[0] },
+            },
+            {
+              type: "Feature",
+              properties: { kind: "finish" },
+              geometry: {
+                type: "Point",
+                coordinates: coords[coords.length - 1],
               },
-              {
-                type: "Feature",
-                properties: { kind: "finish" },
-                geometry: { type: "Point", coordinates: coords[coords.length - 1] }
-              }
-            ]
-          }
-        });
+            },
+          ],
+        },
+      });
 
-        map.addLayer({
-          id: POI,
-          type: "circle",
-          source: SRC_POI,
-          paint: {
-            "circle-radius": 5.5,
-            "circle-stroke-width": 2,
-            "circle-stroke-color": "#ffffff",
-            "circle-color": [
-              "case",
-              ["==", ["get", "kind"], "finish"],
-              "#ff3366",
-              "#00ffcc"
-            ]
-          }
+      map.addLayer({
+        id: POI,
+        type: "circle",
+        source: SRC_POI,
+        paint: {
+          "circle-radius": 5.5,
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#ffffff",
+          "circle-color": [
+            "case",
+            ["==", ["get", "kind"], "finish"],
+            "#ff3366",
+            "#00ffcc",
+          ],
+        },
+      });
+
+      // Fit camera to the selected route
+      const rbounds = new maplibregl.LngLatBounds();
+      coords.forEach((c) => rbounds.extend(c));
+
+      if (!rbounds.isEmpty()) {
+        map.fitBounds(rbounds, {
+          padding: 70,
+          maxZoom: 14,
+          duration: 700,
         });
       }
-
-      // No auto-fit here (camera stays stable)
     });
   }, [selectedRoute]);
 

@@ -5,7 +5,8 @@
     "eventDescription": "Rolling foothills and two big climbs.",
     "eventDate": "November 15, 2025",
     "eventTime": "7:15 AM",
-    "eventStartLocation": "Skunk Hollow Trailhead, El Dorado Hills, CA",
+    "startLocationName": "Skunk Hollow Trailhead",
+    "startLocationUrl": "https://maps.app.goo.gl/P8DtNg8qZ5UUfGwx8",
     "routes": [
       {
         "id": "SUC-023-LRG",
@@ -46,6 +47,38 @@
         "gpxUrl": "/gpx/SUC-023/SUC-023-XXL.gpx",
         "geojsonUrl": "/routes/SUC-023-XXL.geojson",
         "statsUrl": "/routes/SUC-023-XXL.json"
+      }
+    ]
+  },
+
+  {
+    "eventId": "SUC-024",
+    "eventName": "SUC 024 – ALT-ered State",
+    "eventDescription": "Auburn Lakes Trail (ALT) loop — rolling singletrack, canyon overlooks, and classic foothill terrain.",
+    "eventDate": "November 22, 2025",
+    "eventTime": "7:15 AM",
+    "startLocationName": "Quarry Trail Parking Area",
+    "startLocationUrl": "https://maps.app.goo.gl/kziJ6THUdzpAarLn7",
+    "routes": [
+      {
+        "label": "MED",
+        "statsUrl": "/routes/SUC-024-MED.json",
+        "geojsonUrl": "/routes/SUC-024-MED.geojson"
+      },
+      {
+        "label": "LRG",
+        "statsUrl": "/routes/SUC-024-LRG.json",
+        "geojsonUrl": "/routes/SUC-024-LRG.geojson"
+      },
+      {
+        "label": "XL",
+        "statsUrl": "/routes/SUC-024-XL.json",
+        "geojsonUrl": "/routes/SUC-024-XL.geojson"
+      },
+      {
+        "label": "XXL",
+        "statsUrl": "/routes/SUC-024-XXL.json",
+        "geojsonUrl": "/routes/SUC-024-XXL.geojson"
       }
     ]
   }

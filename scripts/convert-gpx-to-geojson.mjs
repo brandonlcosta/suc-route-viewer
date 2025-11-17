@@ -1,24 +1,22 @@
 /**
- * scripts/convert-gpx-to-geojson.mjs
+ * scripts/convert-gpx-to-geojson.mjs — SUC Route Builder v3
  *
  * Purpose:
  *  - Scan /public/gpx/<eventId>/ directories
- *  - Read event.json metadata per event
+ *  - Optionally read event.json metadata per event
  *  - Convert GPX → GeoJSON
  *  - Compute distance, elevation, and profile series
  *  - Generate:
  *      /public/routes/<routeId>.geojson
  *      /public/routes/<routeId>.json
- *  - Generate a global /public/events.json catalog
+ *
+ * IMPORTANT:
+ *  - This version does NOT write /public/events.json.
+ *    You maintain events.json manually.
  *
  * Requirements:
  *  - Node 18+
  *  - npm i @tmcw/togeojson xmldom
- *
- * Deterministic Output:
- *  - Fixed neon SUC palette (MED/LRG/XL/XXL)
- *  - Lexicographic route ordering
- *  - Atomic writes
  */
 
 import fs from "fs";
@@ -26,37 +24,93 @@ import path from "path";
 import { DOMParser } from "xmldom";
 import { gpx } from "@tmcw/togeojson";
 
-// Directories
+/* ------------------------------------------------------
+   PATH CONSTANTS
+------------------------------------------------------ */
+
 const ROOT_DIR = path.resolve(process.cwd(), "public");
 const GPX_DIR = path.join(ROOT_DIR, "gpx");
 const ROUTES_OUT = path.join(ROOT_DIR, "routes");
-const EVENTS_OUT = path.join(ROOT_DIR, "events.json");
 
 // Ensure output directory exists
-if (!fs.existsSync(ROUTES_OUT)) fs.mkdirSync(ROUTES_OUT, { recursive: true });
+if (!fs.existsSync(ROUTES_OUT)) {
+  fs.mkdirSync(ROUTES_OUT, { recursive: true });
+}
 
-// Neon SUC palette (locked in)
+/* ------------------------------------------------------
+   NEON SUC PALETTE
+------------------------------------------------------ */
+
 const COLOR_MAP = {
   MED: "#00FF99",
   LRG: "#13FFE2",
-  XL:  "#FF47A1",
+  XL: "#FF47A1",
   XXL: "#9B4DFF",
 };
 
-// Utility: write JSON atomically
-async function writeAtomic(filePath, data) {
-  const tmp = `${filePath}.tmp`;
-  await fs.promises.writeFile(tmp, JSON.stringify(data, null, 2), "utf-8");
-  await fs.promises.rename(tmp, filePath);
+/* ------------------------------------------------------
+   UTILITIES
+------------------------------------------------------ */
+
+// Simple sleep helper (for retry backoff)
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Haversine distance in meters
+/**
+ * Windows-friendly atomic write with small retry loop.
+ * Avoids EPERM/EBUSY rename issues on locked files.
+ */
+async function writeAtomic(filePath, data) {
+  const tmpPath = `${filePath}.tmp`;
+  const json = JSON.stringify(data, null, 2);
+
+  // Try a few times if Windows is holding a lock
+  const maxAttempts = 5;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await fs.promises.writeFile(tmpPath, json, "utf-8");
+      await fs.promises.rename(tmpPath, filePath);
+      return;
+    } catch (err) {
+      const code = err && err.code;
+      const isLockError = code === "EPERM" || code === "EBUSY";
+
+      if (!isLockError || attempt === maxAttempts) {
+        // Best effort cleanup of tmp file
+        try {
+          if (fs.existsSync(tmpPath)) {
+            await fs.promises.unlink(tmpPath);
+          }
+        } catch {
+          // ignore cleanup errors
+        }
+        throw err;
+      }
+
+      // Wait a bit and retry
+      const delay = 150 * attempt;
+      console.warn(
+        `⚠ writeAtomic retry ${attempt}/${maxAttempts} for ${path.basename(
+          filePath
+        )} (code: ${code}) — waiting ${delay}ms`
+      );
+      await sleep(delay);
+    }
+  }
+}
+
+/**
+ * Haversine distance between two lon/lat pairs (in meters)
+ */
 function haversine(a, b) {
   const R = 6371000;
-  const toRad = deg => (deg * Math.PI) / 180;
+  const toRad = (deg) => (deg * Math.PI) / 180;
 
-  const lat1 = a[1], lon1 = a[0];
-  const lat2 = b[1], lon2 = b[0];
+  const lat1 = a[1];
+  const lon1 = a[0];
+  const lat2 = b[1];
+  const lon2 = b[0];
 
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
@@ -71,7 +125,12 @@ function haversine(a, b) {
   return 2 * R * Math.asin(Math.sqrt(aCalc));
 }
 
-// Compute distance + elevation profile
+/**
+ * Compute distance / elevation profile from coordinate + elevation series.
+ *
+ * coords: [ [lon, lat], ... ]
+ * elevations: [ meters, ... ]
+ */
 function computeProfile(coords, elevations) {
   const distanceSeries = [0];
   let totalDist = 0;
@@ -101,31 +160,52 @@ function computeProfile(coords, elevations) {
   };
 }
 
-// Parse a single GPX file → GeoJSON + stats
-async function processRoute(eventId, routeFile, eventMeta) {
+/* ------------------------------------------------------
+   ROUTE PROCESSING
+------------------------------------------------------ */
+
+/**
+ * Parse a single GPX file → GeoJSON + stats.
+ *
+ * eventMeta is OPTIONAL, e.g.:
+ * {
+ *   routes: {
+ *     MED: { name, description, color },
+ *     LRG: { ... },
+ *     XL:  { ... },
+ *     XXL: { ... }
+ *   }
+ * }
+ */
+async function processRoute(eventId, routeFile, eventMeta = {}) {
   const fullPath = path.join(GPX_DIR, eventId, routeFile);
 
   const xmlStr = await fs.promises.readFile(fullPath, "utf-8");
   const dom = new DOMParser().parseFromString(xmlStr);
 
   const geo = gpx(dom);
-  const feats = geo.features.filter(f => f.geometry.type === "LineString");
+  const feats = geo.features.filter((f) => f.geometry.type === "LineString");
 
   if (feats.length === 0) {
-    console.warn(`No LineString found in ${routeFile}`);
+    console.warn(`⚠ No LineString found in ${routeFile}`);
     return null;
   }
 
-  // Combine all segments if necessary
+  // Flatten all coordinates and elevations into a single track
   const allCoords = [];
   const allElevs = [];
 
-  feats.forEach(f => {
+  feats.forEach((f) => {
     f.geometry.coordinates.forEach(([lon, lat, ele]) => {
       allCoords.push([lon, lat]);
       allElevs.push(ele ?? 0);
     });
   });
+
+  if (allCoords.length < 2) {
+    console.warn(`⚠ Not enough coordinates in ${routeFile}`);
+    return null;
+  }
 
   // Compute stats
   const stats = computeProfile(allCoords, allElevs);
@@ -136,24 +216,29 @@ async function processRoute(eventId, routeFile, eventMeta) {
 
   const baseId = routeFile.replace(/\.gpx$/i, "");
   const id = baseId;
+
+  const routeMeta =
+    eventMeta.routes && typeof eventMeta.routes === "object"
+      ? eventMeta.routes[label] ?? {}
+      : {};
+
   const color =
-    (eventMeta.routes?.[label]?.color) ||
+    routeMeta.color ||
     COLOR_MAP[label] ||
-    COLOR_MAP["MED"];
+    COLOR_MAP.MED;
 
   const name =
-    eventMeta.routes?.[label]?.name ||
+    routeMeta.name ||
     `${label} Route`;
 
-  const description =
-    eventMeta.routes?.[label]?.description || "";
+  const description = routeMeta.description || "";
 
-  // Paths
+  // URLs as seen by the frontend (relative to /public root)
   const gpxUrl = `/gpx/${eventId}/${routeFile}`;
   const geojsonUrl = `/routes/${id}.geojson`;
   const statsUrl = `/routes/${id}.json`;
 
-  // Write GeoJSON (with color baked in)
+  // GeoJSON with color baked in props
   const geoOut = {
     type: "FeatureCollection",
     features: [
@@ -168,12 +253,9 @@ async function processRoute(eventId, routeFile, eventMeta) {
     ],
   };
 
-  await writeAtomic(
-    path.join(ROUTES_OUT, `${id}.geojson`),
-    geoOut
-  );
+  await writeAtomic(path.join(ROUTES_OUT, `${id}.geojson`), geoOut);
 
-  // Write stats JSON
+  // Stats JSON consumed by the frontend loader
   const statsOut = {
     id,
     label,
@@ -191,10 +273,7 @@ async function processRoute(eventId, routeFile, eventMeta) {
     elevationSeries: stats.elevationSeries,
   };
 
-  await writeAtomic(
-    path.join(ROUTES_OUT, `${id}.json`),
-    statsOut
-  );
+  await writeAtomic(path.join(ROUTES_OUT, `${id}.json`), statsOut);
 
   return {
     id,
@@ -208,50 +287,95 @@ async function processRoute(eventId, routeFile, eventMeta) {
   };
 }
 
-// Process an entire event folder
+/* ------------------------------------------------------
+   EVENT PROCESSING
+------------------------------------------------------ */
+
+/**
+ * Process one event folder: /public/gpx/<eventId>/
+ *
+ * - event.json is OPTIONAL
+ *   If present, it can override:
+ *   {
+ *     routes: {
+ *       MED: { name, description, color },
+ *       ...
+ *     }
+ *   }
+ */
 async function processEvent(eventId) {
   const eventDir = path.join(GPX_DIR, eventId);
   const metaPath = path.join(eventDir, "event.json");
 
-  if (!fs.existsSync(metaPath)) {
-    console.warn(`Missing event.json in ${eventId}`);
-    return null;
-  }
+  let meta = {};
 
-  const raw = await fs.promises.readFile(metaPath, "utf-8");
-  const meta = JSON.parse(raw);
+  if (fs.existsSync(metaPath)) {
+    try {
+      const raw = await fs.promises.readFile(metaPath, "utf-8");
+      meta = JSON.parse(raw);
+    } catch (err) {
+      console.warn(
+        `⚠ Failed to parse event.json in ${eventId}: ${err.message}`
+      );
+      meta = {};
+    }
+  } else {
+    console.log(`ℹ No event.json in ${eventId}, using defaults.`);
+  }
 
   const files = await fs.promises.readdir(eventDir);
-  const gpxFiles = files.filter(f => f.endsWith(".gpx")).sort();
-
-  const routeDefs = [];
-  for (const f of gpxFiles) {
-    const route = await processRoute(eventId, f, meta);
-    if (route) routeDefs.push(route);
-  }
-
-  return {
-    eventId,
-    eventName: meta.eventName || eventId,
-    eventDescription: meta.eventDescription || "",
-    routes: routeDefs,
-  };
-}
-
-// Main execution
-(async () => {
-  const events = [];
-  const eventFolders = (await fs.promises.readdir(GPX_DIR))
-    .filter(f => fs.lstatSync(path.join(GPX_DIR, f)).isDirectory())
+  const gpxFiles = files
+    .filter((f) => f.toLowerCase().endsWith(".gpx"))
     .sort();
 
-  for (const ev of eventFolders) {
-    const out = await processEvent(ev);
-    if (out) events.push(out);
+  if (gpxFiles.length === 0) {
+    console.warn(`⚠ No GPX files found in ${eventId}`);
+    return 0;
   }
 
-  await writeAtomic(EVENTS_OUT, events);
+  let count = 0;
+  for (const f of gpxFiles) {
+    const out = await processRoute(eventId, f, meta);
+    if (out) count++;
+  }
+
+  return count;
+}
+
+/* ------------------------------------------------------
+   MAIN
+------------------------------------------------------ */
+
+(async () => {
+  if (!fs.existsSync(GPX_DIR)) {
+    console.error("❌ GPX directory does not exist:", GPX_DIR);
+    process.exit(1);
+  }
+
+  const entries = await fs.promises.readdir(GPX_DIR, { withFileTypes: true });
+  const eventFolders = entries
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name)
+    .sort();
+
+  if (eventFolders.length === 0) {
+    console.warn("⚠ No event folders found under:", GPX_DIR);
+    process.exit(0);
+  }
+
+  let totalEvents = 0;
+  let totalRoutes = 0;
+
+  for (const ev of eventFolders) {
+    const count = await processEvent(ev);
+    if (count > 0) {
+      totalEvents++;
+      totalRoutes += count;
+      console.log(`✔ Processed ${ev}: ${count} routes`);
+    }
+  }
 
   console.log("✔ GPX conversion complete.");
-  console.log(`✔ Processed events: ${events.length}`);
+  console.log(`✔ Events processed: ${totalEvents}`);
+  console.log(`✔ Routes generated: ${totalRoutes}`);
 })();

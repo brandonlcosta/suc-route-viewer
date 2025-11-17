@@ -1,5 +1,5 @@
 /**
- * src/data/loadEvents.ts — SUC HQ Unified Loader (v2.1)
+ * src/data/loadEvents.ts — SUC HQ Unified Loader (v2.2)
  *
  * Responsibilities:
  *  - Load multi-event catalog (/events.json)
@@ -8,9 +8,9 @@
  *  - Provide safe, deterministic ordering every time
  *
  * Notes:
- *  - This is a frontend-only loader (no server).
+ *  - Frontend-only loader (no server).
  *  - Fails gracefully on missing files.
- *  - 100% compatible with the new Unified Route Map engine.
+ *  - Compatible with the Unified Route Map + Elevation engine.
  */
 
 //
@@ -47,7 +47,10 @@ export interface SUCEvent {
   eventDescription: string;
   eventDate?: string;
   eventTime?: string;
-  eventStartLocation?: string; // 👈 NEW
+
+  // New: explicit start location fields (match events.json)
+  startLocationName?: string;
+  startLocationUrl?: string;
 
   routes: SUCRoute[];
 }
@@ -56,7 +59,7 @@ export type SUCEventCatalog = SUCEvent[];
 
 //
 // ─────────────────────────────────────────────────────────────
-// Types for raw files inside /public/events.json
+// Types for raw rows inside /public/events.json
 // ─────────────────────────────────────────────────────────────
 //
 
@@ -72,7 +75,11 @@ interface EventsIndexEvent {
   eventDescription: string;
   eventDate?: string;
   eventTime?: string;
-  eventStartLocation?: string; // 👈 NEW
+
+  // These match the keys in public/events.json
+  startLocationName?: string;
+  startLocationUrl?: string;
+
   routes: EventsIndexRouteRef[];
 }
 
@@ -132,7 +139,7 @@ async function loadGeoJSON(
 
 //
 // ─────────────────────────────────────────────────────────────
-// Normalize route labels → strict MED/LRG/XL/XXL
+// Normalize route labels → strict MED / LRG / XL / XXL
 // ─────────────────────────────────────────────────────────────
 //
 
@@ -144,7 +151,6 @@ function normalizeLabel(raw: string): "MED" | "LRG" | "XL" | "XXL" {
   if (s.includes("lrg") || s.includes("large")) return "LRG";
   if (s.includes("med") || s.includes("medium")) return "MED";
 
-  // fallback: treat unknown as XL but log for debugging
   console.warn("[SUC] Unknown route label:", raw, "→ defaulting to XL");
   return "XL";
 }
@@ -166,7 +172,6 @@ async function loadRoute(
   return {
     id: stats.id,
 
-    // normalized and safe
     label: normalizeLabel(stats.label),
     name: stats.name,
     description: stats.description,
@@ -225,7 +230,8 @@ export async function loadSUCEvents(): Promise<SUCEventCatalog> {
       eventDescription: ev.eventDescription,
       eventDate: ev.eventDate,
       eventTime: ev.eventTime,
-      eventStartLocation: ev.eventStartLocation, // 👈 wired through
+      startLocationName: ev.startLocationName,
+      startLocationUrl: ev.startLocationUrl,
       routes: loadedRoutes,
     });
   }
