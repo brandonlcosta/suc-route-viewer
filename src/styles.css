@@ -1,5 +1,5 @@
 /* ======================================================
-   SUC APP — Cosmic Neon UI v2.1
+   SUC APP — Cosmic Neon UI v2.2
    Structured, optimized, map-safe, neon-polished system
 ====================================================== */
 
@@ -65,6 +65,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.75rem;
 
   background: rgba(10, 12, 22, 0.8);
   backdrop-filter: blur(14px);
@@ -76,13 +77,67 @@ body {
   padding-bottom: 0.4rem;
 }
 
+.suc-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.suc-header-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.suc-header-right {
+  display: flex;
+  align-items: center;
+}
+
+/* meta block under selector */
 .suc-header-meta {
   font-size: 0.85rem;
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
-  opacity: 0.85;
+  gap: 0.12rem;
+  opacity: 0.88;
 }
+
+.suc-event-description {
+  color: var(--fg-muted);
+}
+
+.suc-event-datetime {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  opacity: 0.9;
+}
+
+.suc-event-date,
+.suc-event-time {
+  font-weight: 500;
+}
+
+.suc-event-dot {
+  opacity: 0.6;
+}
+
+.suc-event-location {
+  margin-left: 0.1rem;
+  color: var(--accent-cyan);
+  text-decoration: none;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.suc-event-location:hover {
+  text-decoration: underline;
+  opacity: 1;
+}
+
+/* selector + settings */
 
 .suc-event-select {
   font: inherit;
@@ -239,6 +294,48 @@ body {
   display: flex;
   align-items: center;
   gap: 0.7rem;
+  margin-bottom: 0.35rem;
+}
+
+/* tag chip */
+.suc-route-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+
+  border: 1px solid rgba(160, 160, 220, 0.9);
+  background: rgba(8, 10, 26, 0.9);
+}
+
+/* tag emphasis per label (optional) */
+.suc-route-tag-MED {
+  border-color: var(--accent-aqua);
+  color: var(--accent-aqua);
+}
+.suc-route-tag-LRG {
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+}
+.suc-route-tag-XL {
+  border-color: var(--accent-purple);
+  color: var(--accent-purple);
+}
+.suc-route-tag-XXL {
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+}
+
+.suc-route-detail-titleblock {
+  display: flex;
+  flex-direction: column;
 }
 
 .suc-route-detail-name {
@@ -254,6 +351,22 @@ body {
   margin-top: 0.55rem;
   opacity: 0.9;
   font-size: 0.86rem;
+}
+
+.suc-route-detail-actions {
+  margin-top: 0.65rem;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.suc-route-detail-actions a {
+  font-size: 0.8rem;
+  color: var(--accent-cyan);
+  text-decoration: none;
+}
+
+.suc-route-detail-actions a:hover {
+  text-decoration: underline;
 }
 
 /* ------------------------------------------------------

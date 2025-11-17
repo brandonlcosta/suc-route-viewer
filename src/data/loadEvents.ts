@@ -1,5 +1,5 @@
 /**
- * src/data/loadEvents.ts — SUC HQ Unified Loader (v2.0)
+ * src/data/loadEvents.ts — SUC HQ Unified Loader (v2.1)
  *
  * Responsibilities:
  *  - Load multi-event catalog (/events.json)
@@ -47,6 +47,7 @@ export interface SUCEvent {
   eventDescription: string;
   eventDate?: string;
   eventTime?: string;
+  eventStartLocation?: string; // 👈 NEW
 
   routes: SUCRoute[];
 }
@@ -71,6 +72,7 @@ interface EventsIndexEvent {
   eventDescription: string;
   eventDate?: string;
   eventTime?: string;
+  eventStartLocation?: string; // 👈 NEW
   routes: EventsIndexRouteRef[];
 }
 
@@ -102,7 +104,7 @@ interface RouteStats {
 
 //
 // ─────────────────────────────────────────────────────────────
-// Safe JSON loader
+// Safe JSON loaders
 // ─────────────────────────────────────────────────────────────
 //
 
@@ -206,11 +208,9 @@ export async function loadSUCEvents(): Promise<SUCEventCatalog> {
       if (route) loadedRoutes.push(route);
     }
 
-    //
     // Deterministic route ordering:
     //   1) Shortest distance first
     //   2) If tie → alphabetical label
-    //
     loadedRoutes.sort((a, b) => {
       const da = Number.isFinite(a.distanceMi) ? a.distanceMi : Infinity;
       const db = Number.isFinite(b.distanceMi) ? b.distanceMi : Infinity;
@@ -225,13 +225,12 @@ export async function loadSUCEvents(): Promise<SUCEventCatalog> {
       eventDescription: ev.eventDescription,
       eventDate: ev.eventDate,
       eventTime: ev.eventTime,
+      eventStartLocation: ev.eventStartLocation, // 👈 wired through
       routes: loadedRoutes,
     });
   }
 
-  //
-  // Sort events in deterministic order — lexicographically by eventId
-  //
+  // Deterministic event ordering
   catalog.sort((a, b) => a.eventId.localeCompare(b.eventId));
 
   return catalog;

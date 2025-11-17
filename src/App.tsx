@@ -46,6 +46,13 @@ export default function App() {
     );
   }, [activeEvent, selectedRouteId]);
 
+  // Computed Google Maps link for start location
+  const startLocationUrl = useMemo(() => {
+    if (!activeEvent?.eventStartLocation) return null;
+    const q = encodeURIComponent(activeEvent.eventStartLocation);
+    return `https://www.google.com/maps/search/?api=1&query=${q}`;
+  }, [activeEvent?.eventStartLocation]);
+
   // Event switch
   const handleEventSelect = (eventId: string) => {
     setActiveEventId(eventId);
@@ -102,6 +109,22 @@ export default function App() {
                   <span className="suc-event-time">
                     {activeEvent.eventTime}
                   </span>
+                )}
+
+                {activeEvent.eventStartLocation && startLocationUrl && (
+                  <>
+                    {(activeEvent.eventDate || activeEvent.eventTime) && (
+                      <span className="suc-event-dot">•</span>
+                    )}
+                    <a
+                      href={startLocationUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="suc-event-location"
+                    >
+                      Start: {activeEvent.eventStartLocation}
+                    </a>
+                  </>
                 )}
               </span>
             </div>
@@ -162,15 +185,9 @@ export default function App() {
                   </span>
 
                   <div className="suc-route-detail-titleblock">
-                    <span className="suc-route-detail-name">
-                      {selectedRoute.name}
-                    </span>
                     <span className="suc-route-detail-stats">
                       {selectedRoute.distanceMi.toFixed(1)} mi ·{" "}
-                      {Math.round(
-                        selectedRoute.elevationFt
-                      ).toLocaleString()}{" "}
-                      ft ↑
+                      {Math.round(selectedRoute.elevationFt).toLocaleString()} ft ↑
                     </span>
                   </div>
                 </div>
