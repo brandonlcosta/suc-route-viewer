@@ -46,7 +46,6 @@ export default function MultiRouteMap({ event, selectedRoute }: Props) {
       zoom: 11,
       pitch: 35,
       bearing: -28,
-      antialias: true,
       attributionControl: false,
     });
 
