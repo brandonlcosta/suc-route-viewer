@@ -19,9 +19,21 @@
 // ─────────────────────────────────────────────────────────────
 //
 
+// Stable SUC route labels
+export type RouteLabel = "MED" | "LRG" | "XL" | "XXL";
+
+// Single source of truth for neon colors
+export const ROUTE_COLORS: Record<RouteLabel, string> = {
+  MED: "#00FF99", // neon green
+  LRG: "#13FFE2", // neon blue
+  XL:  "#D000FF", // purple
+  XXL: "#FF5050", // red/orange
+};
+
+
 export interface SUCRoute {
   id: string;
-  label: "MED" | "LRG" | "XL" | "XXL";
+  label: RouteLabel;  // 👈 now using the shared type
   name: string;
   description: string;
   color: string;
@@ -143,7 +155,7 @@ async function loadGeoJSON(
 // ─────────────────────────────────────────────────────────────
 //
 
-function normalizeLabel(raw: string): "MED" | "LRG" | "XL" | "XXL" {
+function normalizeLabel(raw: string): RouteLabel {
   const s = raw.toLowerCase();
 
   if (s.includes("xxl")) return "XXL";
@@ -169,13 +181,19 @@ async function loadRoute(
 
   const geojson = await loadGeoJSON(routeMeta.geojsonUrl);
 
+  // Use whatever label we can find, normalize it, and drive color from that
+  const rawLabel = stats.label || routeMeta.label;
+  const label = normalizeLabel(rawLabel);
+
   return {
     id: stats.id,
 
-    label: normalizeLabel(stats.label),
+    label,
     name: stats.name,
     description: stats.description,
-    color: stats.color,
+
+    // 💅 Hard-lock color to label mapping (MED/ LRG / XL / XXL)
+    color: ROUTE_COLORS[label],
 
     gpxUrl: stats.gpxUrl,
     geojsonUrl: stats.geojsonUrl,

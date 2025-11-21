@@ -24,46 +24,6 @@ function thinCoordinates(
   return result;
 }
 
-// Parse event.eventDate into a timestamp (ms since epoch)
-function getEventTimestamp(ev: SUCEvent): number | null {
-  if (!ev.eventDate) return null;
-  const ts = Date.parse(ev.eventDate);
-  if (Number.isNaN(ts)) return null;
-  return ts;
-}
-
-// Choose the "scheduled" event based on today's date:
-function pickDefaultEventByDate(events: SUCEvent[]): SUCEvent | null {
-  if (!events.length) return null;
-
-  const now = Date.now();
-  let upcoming: { ev: SUCEvent; diff: number } | null = null;
-  let recentPast: { ev: SUCEvent; diff: number } | null = null;
-
-  for (const ev of events) {
-    const ts = getEventTimestamp(ev);
-    if (ts == null) continue;
-
-    const diff = ts - now;
-
-    if (diff >= 0) {
-      // future event
-      if (!upcoming || diff < upcoming.diff) {
-        upcoming = { ev, diff };
-      }
-    } else {
-      // past event
-      const abs = Math.abs(diff);
-      if (!recentPast || abs < recentPast.diff) {
-        recentPast = { ev, diff: abs };
-      }
-    }
-  }
-
-  if (upcoming) return upcoming.ev;
-  if (recentPast) return recentPast.ev;
-  return events[0] ?? null;
-}
 
 // Choose the default route for an event: prefer "XL", else longest distance
 function pickDefaultRoute(event: SUCEvent | null): SUCRoute | null {
@@ -82,9 +42,9 @@ export default function App() {
   const [activeEventId, setActiveEventId] = useState<string | null>(null);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
 
-  // Live GPS toggle
-  const [isLiveGpsOn, setIsLiveGpsOn] = useState(false);
-  console.log("App isLiveGpsOn:", isLiveGpsOn);
+// Live GPS toggle
+const [isLiveGpsOn, setIsLiveGpsOn] = useState(false);
+console.log("App isLiveGpsOn:", isLiveGpsOn);
 
   // Playback state
   const [isPlaybackOn, setIsPlaybackOn] = useState(false);
@@ -167,17 +127,20 @@ export default function App() {
       const loaded = await loadSUCEvents();
       setEvents(loaded);
 
+      // Choose newest event (already sorted in loadSUCEvents)
       if (loaded.length > 0) {
-        const defaultEvent = pickDefaultEventByDate(loaded) ?? loaded[0];
-        setActiveEventId(defaultEvent.eventId);
+        const newestEvent = loaded[0];
+        setActiveEventId(newestEvent.eventId);
 
-        const defaultRoute = pickDefaultRoute(defaultEvent);
+        // Pick default route: XL → longest
+        const defaultRoute = pickDefaultRoute(newestEvent);
         setSelectedRouteId(defaultRoute ? defaultRoute.id : null);
       }
     }
 
     init();
   }, []);
+
 
   const isLoading = events.length === 0;
 
