@@ -1,9 +1,8 @@
 // src/components/ElevationChart.tsx
 //
-// Elevation chart for the selected SUC route.
-// Converts stored meter-based series into:
-//   • miles (x-axis)
-//   • feet (y-axis, rounded)
+// Elevation chart for the selected SUC route, with a single
+// playback dot that moves smoothly along the profile in sync
+// with playbackProgress.
 
 import { useMemo } from "react";
 import type { FC } from "react";
@@ -29,6 +28,8 @@ type RouteWithSeries = LoaderRoute & {
 
 export interface ElevationChartProps {
   route: RouteWithSeries | null;
+  /** 0–1 normalized playback position along the route */
+  playbackProgress?: number;
 }
 
 ChartJS.register(LineElement, PointElement, LinearScale, Tooltip, Filler);
@@ -36,7 +37,10 @@ ChartJS.register(LineElement, PointElement, LinearScale, Tooltip, Filler);
 const METERS_PER_MILE = 1609.34;
 const FEET_PER_METER = 3.28084;
 
-const ElevationChart: FC<ElevationChartProps> = ({ route }) => {
+const ElevationChart: FC<ElevationChartProps> = ({
+  route,
+  playbackProgress,
+}) => {
   const { data, options, hasSeries } = useMemo(() => {
     if (!route) {
       return {
@@ -49,12 +53,11 @@ const ElevationChart: FC<ElevationChartProps> = ({ route }) => {
     const distM = route.distanceSeries ?? [];
     const elevM = route.elevationSeries ?? [];
 
-    // Convert meters → miles / feet
-    const distMi = distM.map((m) =>
-      Number.isFinite(m) ? (m as number) / METERS_PER_MILE : m
-    );
     const elevFt = elevM.map((m) =>
       Number.isFinite(m) ? Math.round((m as number) * FEET_PER_METER) : m
+    );
+    const distMi = distM.map((m) =>
+      Number.isFinite(m) ? (m as number) / METERS_PER_MILE : m
     );
 
     const validSeries =
@@ -68,27 +71,69 @@ const ElevationChart: FC<ElevationChartProps> = ({ route }) => {
       };
     }
 
-    const labels = distMi.map((d) =>
-      Number.isFinite(d) ? Number((d as number).toFixed(1)) : d
-    );
+    // --- Base XY points for the elevation profile ---
+    const basePoints = distMi.map((d, i) => ({
+      x: Number.isFinite(d) ? (d as number) : 0,
+      y: elevFt[i] as number,
+    }));
+
+    const datasets: ChartData<"line">["datasets"] = [
+      {
+        label: "Elevation",
+        data: basePoints,
+        fill: true,
+        borderWidth: 2,
+        tension: 0.3,
+        pointRadius: 0,
+        pointHitRadius: 6,
+        backgroundColor: route.color
+          ? toRgba(route.color, 0.22)
+          : "rgba(255,0,255,0.22)",
+        borderColor: route.color ?? "#00ff99",
+      },
+    ];
+
+    // --- Single playback dot aligned with the profile (interpolated) ---
+    if (
+      typeof playbackProgress === "number" &&
+      playbackProgress >= 0 &&
+      playbackProgress <= 1 &&
+      elevFt.length > 1
+    ) {
+      const maxIndex = elevFt.length - 1;
+      const scaled = playbackProgress * maxIndex;
+      const i0 = Math.floor(scaled);
+      const i1 = Math.min(i0 + 1, maxIndex);
+      const t = scaled - i0;
+
+      const x0 = distMi[i0] as number;
+      const x1 = distMi[i1] as number;
+      const y0 = elevFt[i0] as number;
+      const y1 = elevFt[i1] as number;
+
+      const x = lerp(x0, x1, t);
+      const y = lerp(y0, y1, t);
+
+      datasets.push({
+        label: "Playback Dot",
+        data: [{ x, y }],
+        showLine: false,
+        borderWidth: 0,
+        pointRadius: 5,
+        pointHoverRadius: 6,
+        pointHitRadius: 8,
+        pointBackgroundColor: route.color ?? "#ffe76a",
+        pointBorderColor: "#ffffff",
+        pointBorderWidth: 2,
+      } as any);
+    }
 
     const chartData: ChartData<"line"> = {
-      labels,
-      datasets: [
-        {
-          label: "Elevation",
-          data: elevFt,
-          fill: true,
-          borderWidth: 2,
-          tension: 0.3,
-          pointRadius: 0,
-          pointHitRadius: 6,
-          backgroundColor: route.color
-            ? toRgba(route.color, 0.25)
-            : "rgba(255,0,255,0.25)",
-          borderColor: route.color ?? "#ff00ff",
-        },
-      ],
+      // labels are optional when using XY points; keeps tooltip distance nice
+      labels: distMi.map((d) =>
+        Number.isFinite(d) ? Number((d as number).toFixed(1)) : d
+      ),
+      datasets,
     };
 
     const chartOptions: ChartOptions<"line"> = {
@@ -97,7 +142,7 @@ const ElevationChart: FC<ElevationChartProps> = ({ route }) => {
       plugins: {
         legend: { display: false },
         tooltip: {
-          mode: "index",
+          mode: "nearest",
           intersect: false,
           callbacks: {
             label: (ctx: any) => {
@@ -106,7 +151,6 @@ const ElevationChart: FC<ElevationChartProps> = ({ route }) => {
 
               const distance =
                 typeof xRaw === "number" ? xRaw.toFixed(1) : "0";
-
               const elevation =
                 typeof yRaw === "number" ? Math.round(yRaw) : 0;
 
@@ -140,13 +184,13 @@ const ElevationChart: FC<ElevationChartProps> = ({ route }) => {
         },
       },
       interaction: {
-        mode: "index",
+        mode: "nearest",
         intersect: false,
       },
     };
 
     return { data: chartData, options: chartOptions, hasSeries: true };
-  }, [route]);
+  }, [route, playbackProgress]);
 
   return (
     <div className="suc-elevation-card">
@@ -182,8 +226,14 @@ const ElevationChart: FC<ElevationChartProps> = ({ route }) => {
   );
 };
 
+// Linear interpolation helper
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+// Safe hex → rgba converter
 function toRgba(hex: string, alpha: number): string {
-  const cleaned = hex.replace("#", "");
+  const cleaned = hex.trim().replace("#", "");
   if (cleaned.length !== 3 && cleaned.length !== 6)
     return `rgba(0,255,255,${alpha})`;
 

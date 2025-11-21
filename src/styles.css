@@ -203,6 +203,123 @@ body {
 }
 
 /* ------------------------------------------------------
+   LIVE GPS TOGGLE
+------------------------------------------------------ */
+
+.suc-gps-toggle {
+  position: absolute;
+  top: 0.9rem;
+  right: 0.9rem;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.28rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid rgba(120, 190, 255, 0.9);
+  background:
+    radial-gradient(circle at top left, rgba(40, 120, 255, 0.3), rgba(6, 10, 24, 0.96));
+  color: var(--fg-primary);
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow:
+    0 0 12px rgba(0, 185, 255, 0.55),
+    inset 0 0 10px rgba(0, 70, 160, 0.65);
+  transition:
+    background 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.08s ease,
+    border-color 0.2s ease;
+}
+
+.suc-gps-toggle:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 16px rgba(0, 210, 255, 0.8),
+    inset 0 0 14px rgba(0, 80, 200, 0.75);
+}
+
+.suc-gps-toggle--on {
+  border-color: rgba(140, 230, 255, 1);
+  box-shadow:
+    0 0 18px rgba(0, 235, 255, 0.95),
+    inset 0 0 16px rgba(0, 120, 240, 0.95);
+}
+
+.suc-gps-toggle-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: radial-gradient(circle, #5bc0ff 0%, #0b1a3a 70%);
+  box-shadow:
+    0 0 6px rgba(91, 192, 255, 0.9),
+    0 0 18px rgba(91, 192, 255, 0.75);
+}
+
+.suc-gps-toggle--on .suc-gps-toggle-dot {
+  background: radial-gradient(circle, #9df3ff 0%, #16305a 70%);
+  box-shadow:
+    0 0 10px rgba(157, 243, 255, 0.98),
+    0 0 22px rgba(120, 230, 255, 0.95);
+}
+
+.suc-gps-toggle-label {
+  opacity: 0.85;
+}
+
+/* ------------------------------------------------------
+   ROUTE PLAYBACK CONTROLS
+------------------------------------------------------ */
+
+.suc-playback-controls {
+  position: absolute;
+  bottom: 0.9rem;
+  right: 0.9rem;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(6, 10, 24, 0.96);
+  border: 1px solid rgba(120, 150, 255, 0.7);
+  box-shadow:
+    0 0 14px rgba(0, 180, 255, 0.35),
+    inset 0 0 10px rgba(5, 12, 40, 0.9);
+}
+
+.suc-playback-btn {
+  border: none;
+  background: transparent;
+  color: var(--fg-primary);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  opacity: 0.7;
+  padding: 0.1rem 0.25rem;
+}
+
+.suc-playback-btn-main {
+  font-weight: 700;
+  opacity: 0.95;
+}
+
+.suc-playback-btn.is-active {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+.suc-playback-speed-group {
+  display: inline-flex;
+  gap: 0.2rem;
+  border-left: 1px solid rgba(120, 150, 255, 0.4);
+  padding-left: 0.4rem;
+}
+
+/* ------------------------------------------------------
    ROUTE TABS (Top Pills)
 ------------------------------------------------------ */
 

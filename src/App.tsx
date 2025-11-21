@@ -12,6 +12,16 @@ export default function App() {
   const [activeEventId, setActiveEventId] = useState<string | null>(null);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
 
+  // Live GPS toggle
+  const [isLiveGpsOn, setIsLiveGpsOn] = useState(false);
+
+  // Playback state
+  const [isPlaybackOn, setIsPlaybackOn] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState<"slow" | "med" | "fast">(
+    "med"
+  );
+  const [playbackProgress, setPlaybackProgress] = useState(0); // 0–1
+
   // Load event data on mount
   useEffect(() => {
     async function init() {
@@ -46,6 +56,12 @@ export default function App() {
     );
   }, [activeEvent, selectedRouteId]);
 
+  // Reset playback state (helper)
+  const resetPlayback = () => {
+    setIsPlaybackOn(false);
+    setPlaybackProgress(0);
+  };
+
   // Event switch
   const handleEventSelect = (eventId: string) => {
     setActiveEventId(eventId);
@@ -53,11 +69,75 @@ export default function App() {
     const ev = events.find((e) => e.eventId === eventId);
     const firstRoute = ev?.routes[0];
     setSelectedRouteId(firstRoute ? firstRoute.id : null);
+
+    resetPlayback();
   };
 
   // Route switch
   const handleRouteSelect = (routeId: string) => {
     setSelectedRouteId(routeId);
+    resetPlayback();
+  };
+
+  // Playback loop — advances playbackProgress while isPlaybackOn is true.
+  // Stops at the end, resets progress to 0, and flips isPlaybackOn to false.
+  useEffect(() => {
+    if (!isPlaybackOn || !selectedRoute) return;
+
+    let frameId: number | null = null;
+    let lastTime = performance.now();
+
+    const baseDurationSeconds = 60; // MED: ~60s for full route
+    const speedMult =
+      playbackSpeed === "slow" ? 0.5 : playbackSpeed === "fast" ? 2 : 1;
+
+    const tick = (now: number) => {
+      const dt = (now - lastTime) / 1000;
+      lastTime = now;
+
+      setPlaybackProgress((prev) => {
+        const next = prev + (dt * speedMult) / baseDurationSeconds;
+
+        // Stop + reset when we reach the end
+        if (next >= 1) {
+          if (frameId !== null) {
+            cancelAnimationFrame(frameId);
+          }
+          // turn playback off so button shows "Play" again
+          setIsPlaybackOn(false);
+          return 0; // reset progress for next run
+        }
+
+        return next;
+      });
+
+      frameId = requestAnimationFrame(tick);
+    };
+
+    frameId = requestAnimationFrame(tick);
+
+    return () => {
+      if (frameId !== null) {
+        cancelAnimationFrame(frameId);
+      }
+    };
+  }, [isPlaybackOn, playbackSpeed, selectedRoute]);
+
+  const togglePlayback = () => {
+    if (!selectedRoute) return;
+
+    // If we're starting playback, always reset to the start of the route
+    if (!isPlaybackOn) {
+      setPlaybackProgress(0);
+      setIsPlaybackOn(true);
+    } else {
+      // Pause
+      setIsPlaybackOn(false);
+    }
+  };
+
+  const setSpeed = (speed: "slow" | "med" | "fast") => {
+    setPlaybackSpeed(speed);
   };
 
   return (
@@ -155,7 +235,72 @@ export default function App() {
         <section className="suc-map-shell">
           <div className="suc-map-panel">
             <div className="suc-map-container">
-              <MultiRouteMap event={activeEvent} selectedRoute={selectedRoute} />
+              <MultiRouteMap
+                event={activeEvent}
+                selectedRoute={selectedRoute}
+                isLiveGpsOn={isLiveGpsOn}
+                playbackProgress={playbackProgress}
+                isPlaybackOn={isPlaybackOn}
+              />
+
+              {/* LIVE GPS TOGGLE */}
+              <button
+                type="button"
+                className={`suc-gps-toggle ${
+                  isLiveGpsOn ? "suc-gps-toggle--on" : ""
+                }`}
+                onClick={() => setIsLiveGpsOn((prev) => !prev)}
+                aria-pressed={isLiveGpsOn}
+                aria-label={isLiveGpsOn ? "Disable live GPS" : "Enable live GPS"}
+              >
+                <span className="suc-gps-toggle-dot" />
+                <span className="suc-gps-toggle-label">
+                  {isLiveGpsOn ? "LIVE" : "GPS"}
+                </span>
+              </button>
+
+              {/* ROUTE PLAYBACK CONTROLS */}
+              {selectedRoute && (
+                <div className="suc-playback-controls">
+                  <button
+                    type="button"
+                    className="suc-playback-btn suc-playback-btn-main"
+                    onClick={togglePlayback}
+                  >
+                    {isPlaybackOn ? "Pause" : "Play"}
+                  </button>
+
+                  <div className="suc-playback-speed-group">
+                    <button
+                      type="button"
+                      className={`suc-playback-btn ${
+                        playbackSpeed === "slow" ? "is-active" : ""
+                      }`}
+                      onClick={() => setSpeed("slow")}
+                    >
+                      Slow
+                    </button>
+                    <button
+                      type="button"
+                      className={`suc-playback-btn ${
+                        playbackSpeed === "med" ? "is-active" : ""
+                      }`}
+                      onClick={() => setSpeed("med")}
+                    >
+                      Med
+                    </button>
+                    <button
+                      type="button"
+                      className={`suc-playback-btn ${
+                        playbackSpeed === "fast" ? "is-active" : ""
+                      }`}
+                      onClick={() => setSpeed("fast")}
+                    >
+                      Fast
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </section>
@@ -209,7 +354,10 @@ export default function App() {
                   </p>
                 )}
 
-                <ElevationChart route={selectedRoute} />
+                <ElevationChart
+                  route={selectedRoute}
+                  playbackProgress={playbackProgress}
+                />
 
                 <div className="suc-route-detail-actions">
                   <a href={selectedRoute.gpxUrl} download>
