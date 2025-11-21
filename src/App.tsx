@@ -152,7 +152,7 @@ export default function App() {
 
     const baseDurationSeconds = 60; // MED: ~60s for full route
     const speedMult =
-      playbackSpeed === "slow" ? 0.5 : playbackSpeed === "fast" ? 2 : 1;
+      playbackSpeed === "slow" ? 2 : playbackSpeed === "fast" ? .25 : 1;
 
     const tick = (now: number) => {
       const dt = (now - lastTime) / 1000;
