@@ -7,6 +7,22 @@ import { loadSUCEvents } from "./data/loadEvents";
 import type { SUCEvent, SUCRoute } from "./data/loadEvents";
 import "./styles.css";
 
+function thinCoordinates(
+  coords: [number, number][],
+  step: number
+): [number, number][] {
+  if (coords.length <= step) return coords;
+  const result: [number, number][] = [];
+  for (let i = 0; i < coords.length; i += step) {
+    result.push(coords[i]);
+  }
+  const last = coords[coords.length - 1];
+  if (result[result.length - 1] !== last) {
+    result.push(last);
+  }
+  return result;
+}
+
 export default function App() {
   const [events, setEvents] = useState<SUCEvent[]>([]);
   const [activeEventId, setActiveEventId] = useState<string | null>(null);
@@ -21,6 +37,75 @@ export default function App() {
     "med"
   );
   const [playbackProgress, setPlaybackProgress] = useState(0); // 0–1
+
+  // Permanent ghost layer — all SUC routes as a low-opacity underlay
+  const permanentRoutesGeoJson = useMemo(() => {
+    if (events.length === 0) return null;
+
+    const features: any[] = [];
+
+    for (const event of events) {
+      for (const route of event.routes) {
+        const fc = route.geojson;
+        if (!fc || !Array.isArray(fc.features)) continue;
+
+        for (const feature of fc.features as any[]) {
+          if (!feature.geometry) continue;
+          if (
+            feature.geometry.type !== "LineString" &&
+            feature.geometry.type !== "MultiLineString"
+          ) {
+            continue;
+          }
+
+          const baseProps = {
+            eventId: event.eventId,
+            eventName: event.eventName,
+            routeId: route.id,
+            routeName: route.name,
+          };
+
+          if (feature.geometry.type === "LineString") {
+            const coords = feature.geometry.coordinates as [number, number][];
+            if (!coords || coords.length < 2) continue;
+            const thinned = thinCoordinates(coords, 8);
+
+            features.push({
+              type: "Feature",
+              geometry: {
+                type: "LineString",
+                coordinates: thinned,
+              },
+              properties: baseProps,
+            });
+          } else if (feature.geometry.type === "MultiLineString") {
+            const lines = feature.geometry.coordinates as [number, number][][];
+
+            for (const line of lines) {
+              if (!line || line.length < 2) continue;
+              const thinned = thinCoordinates(line, 8);
+
+              features.push({
+                type: "Feature",
+                geometry: {
+                  type: "LineString",
+                  coordinates: thinned,
+                },
+                properties: baseProps,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    if (features.length === 0) return null;
+
+    return {
+      type: "FeatureCollection",
+      features,
+    };
+  }, [events]);
 
   // Load event data on mount
   useEffect(() => {
@@ -56,31 +141,7 @@ export default function App() {
     );
   }, [activeEvent, selectedRouteId]);
 
-  // Reset playback state (helper)
-  const resetPlayback = () => {
-    setIsPlaybackOn(false);
-    setPlaybackProgress(0);
-  };
-
-  // Event switch
-  const handleEventSelect = (eventId: string) => {
-    setActiveEventId(eventId);
-
-    const ev = events.find((e) => e.eventId === eventId);
-    const firstRoute = ev?.routes[0];
-    setSelectedRouteId(firstRoute ? firstRoute.id : null);
-
-    resetPlayback();
-  };
-
-  // Route switch
-  const handleRouteSelect = (routeId: string) => {
-    setSelectedRouteId(routeId);
-    resetPlayback();
-  };
-
   // Playback loop — advances playbackProgress while isPlaybackOn is true.
-  // Stops at the end, resets progress to 0, and flips isPlaybackOn to false.
   useEffect(() => {
     if (!isPlaybackOn || !selectedRoute) return;
 
@@ -96,16 +157,15 @@ export default function App() {
       lastTime = now;
 
       setPlaybackProgress((prev) => {
-        const next = prev + (dt * speedMult) / baseDurationSeconds;
+        const routeDistance = selectedRoute.distanceMi || 1;
+        const duration = baseDurationSeconds * (routeDistance / 10) * speedMult;
 
-        // Stop + reset when we reach the end
+        const delta = dt / duration;
+        const next = prev + delta;
+
         if (next >= 1) {
-          if (frameId !== null) {
-            cancelAnimationFrame(frameId);
-          }
-          // turn playback off so button shows "Play" again
           setIsPlaybackOn(false);
-          return 0; // reset progress for next run
+          return 0;
         }
 
         return next;
@@ -123,15 +183,33 @@ export default function App() {
     };
   }, [isPlaybackOn, playbackSpeed, selectedRoute]);
 
+  const resetPlayback = () => {
+    setIsPlaybackOn(false);
+    setPlaybackProgress(0);
+  };
+
+  const handleEventSelect = (eventId: string) => {
+    setActiveEventId(eventId);
+
+    const ev = events.find((e) => e.eventId === eventId);
+    const firstRoute = ev?.routes[0];
+    setSelectedRouteId(firstRoute ? firstRoute.id : null);
+
+    resetPlayback();
+  };
+
+  const handleRouteSelect = (routeId: string) => {
+    setSelectedRouteId(routeId);
+    resetPlayback();
+  };
+
   const togglePlayback = () => {
     if (!selectedRoute) return;
 
-    // If we're starting playback, always reset to the start of the route
     if (!isPlaybackOn) {
       setPlaybackProgress(0);
       setIsPlaybackOn(true);
     } else {
-      // Pause
       setIsPlaybackOn(false);
     }
   };
@@ -174,35 +252,28 @@ export default function App() {
               {(activeEvent.eventDate ||
                 activeEvent.eventTime ||
                 activeEvent.startLocationName) && (
-                <span className="suc-event-datetime">
+                <span className="suc-event-meta-row">
                   {activeEvent.eventDate && (
-                    <span className="suc-event-date">
+                    <span className="suc-event-meta-pill">
                       {activeEvent.eventDate}
                     </span>
                   )}
 
-                  {activeEvent.eventDate && activeEvent.eventTime && (
-                    <span className="suc-event-dot">•</span>
-                  )}
-
                   {activeEvent.eventTime && (
-                    <span className="suc-event-time">
+                    <span className="suc-event-meta-pill">
                       {activeEvent.eventTime}
                     </span>
                   )}
 
                   {activeEvent.startLocationName && (
                     <>
-                      {(activeEvent.eventDate || activeEvent.eventTime) && (
-                        <span className="suc-event-dot">•</span>
-                      )}
-
+                      <span className="suc-event-meta-divider">•</span>
                       {activeEvent.startLocationUrl ? (
                         <a
                           href={activeEvent.startLocationUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="suc-event-location"
+                          className="suc-event-location suc-event-location--link"
                         >
                           Start: {activeEvent.startLocationName}
                         </a>
@@ -241,6 +312,7 @@ export default function App() {
                 isLiveGpsOn={isLiveGpsOn}
                 playbackProgress={playbackProgress}
                 isPlaybackOn={isPlaybackOn}
+                permanentRoutesGeoJson={permanentRoutesGeoJson}
               />
 
               {/* LIVE GPS TOGGLE */}
@@ -270,7 +342,7 @@ export default function App() {
                     {isPlaybackOn ? "Pause" : "Play"}
                   </button>
 
-                  <div className="suc-playback-speed-group">
+                  <div className="suc-playback-speeds">
                     <button
                       type="button"
                       className={`suc-playback-btn ${
