@@ -139,16 +139,49 @@ export default function MultiRouteMap({
     };
   }, []);
 
-  // 2. PERMANENT GHOST LAYER (all SUC routes, thinned upstream)
+  // 2. PERMANENT GHOST LAYER — all SUC routes EXCEPT the active event
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !permanentRoutesGeoJson) return;
+
+    // If we lose data or the map, remove the ghost layer entirely
+    if (!map || !permanentRoutesGeoJson) {
+      if (map) {
+        if (map.getLayer(ID.permanentLayer)) map.removeLayer(ID.permanentLayer);
+        if (map.getSource(ID.permanentSrc)) map.removeSource(ID.permanentSrc);
+      }
+      return;
+    }
 
     return withStyleLoaded(map, () => {
-      setGeoJsonSource(map, ID.permanentSrc, permanentRoutesGeoJson);
+      // Start with all routes
+      let dataToUse: FeatureCollection<LineString> = permanentRoutesGeoJson;
 
+      // Filter out the currently active event so we don't double-draw it
+      if (event) {
+        const filteredFeatures = permanentRoutesGeoJson.features.filter((f: any) => {
+          const props = (f.properties || {}) as { eventId?: string };
+          return props.eventId !== event.eventId;
+        });
+
+        dataToUse = {
+          type: "FeatureCollection",
+          features: filteredFeatures,
+        };
+      }
+
+      // If there are no "other" events, remove ghost layer and bail
+      if (!dataToUse.features.length) {
+        if (map.getLayer(ID.permanentLayer)) map.removeLayer(ID.permanentLayer);
+        if (map.getSource(ID.permanentSrc)) map.removeSource(ID.permanentSrc);
+        return;
+      }
+
+      // Use your helper to add/update the source
+      setGeoJsonSource(map, ID.permanentSrc, dataToUse);
+
+      // Add the layer once, re-use it on updates
       if (!map.getLayer(ID.permanentLayer)) {
-        const layerDef = {
+        const layerDefinition = {
           id: ID.permanentLayer,
           type: "line" as const,
           source: ID.permanentSrc,
@@ -160,15 +193,16 @@ export default function MultiRouteMap({
           },
         };
 
-        // Try to keep it under the event routes if they exist
+        // Keep ghosts under the event underlay if that exists
         if (map.getLayer(ID.baseLayer)) {
-          map.addLayer(layerDef, ID.baseLayer);
+          map.addLayer(layerDefinition, ID.baseLayer);
         } else {
-          map.addLayer(layerDef);
+          map.addLayer(layerDefinition);
         }
       }
     });
-  }, [permanentRoutesGeoJson]);
+  }, [permanentRoutesGeoJson, event]);
+
 
   // 3. BASE ROUTE UNDERLAY FOR ACTIVE EVENT + FIT TO EVENT
   useEffect(() => {

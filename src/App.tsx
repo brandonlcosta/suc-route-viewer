@@ -5,7 +5,10 @@ import MultiRouteMap from "./components/MultiRouteMap";
 import ElevationChart from "./components/ElevationChart";
 import { loadSUCEvents } from "./data/loadEvents";
 import type { SUCEvent, SUCRoute } from "./data/loadEvents";
+import type { FeatureCollection, LineString } from "geojson";
 import "./styles.css";
+
+
 
 function thinCoordinates(
   coords: [number, number][],
@@ -39,24 +42,20 @@ export default function App() {
   const [playbackProgress, setPlaybackProgress] = useState(0); // 0–1
 
   // Permanent ghost layer — all SUC routes as a low-opacity underlay
-  const permanentRoutesGeoJson = useMemo(() => {
-    if (events.length === 0) return null;
+  const permanentRoutesGeoJson = useMemo<FeatureCollection<LineString> | null>(
+  () => {
+    if (!events.length) return null;
 
-    const features: any[] = [];
+    const features: FeatureCollection<LineString>["features"] = [];
 
     for (const event of events) {
       for (const route of event.routes) {
         const fc = route.geojson;
         if (!fc || !Array.isArray(fc.features)) continue;
 
-        for (const feature of fc.features as any[]) {
-          if (!feature.geometry) continue;
-          if (
-            feature.geometry.type !== "LineString" &&
-            feature.geometry.type !== "MultiLineString"
-          ) {
-            continue;
-          }
+        for (const rawFeature of fc.features as any[]) {
+          const geom = rawFeature.geometry;
+          if (!geom) continue;
 
           const baseProps = {
             eventId: event.eventId,
@@ -65,9 +64,10 @@ export default function App() {
             routeName: route.name,
           };
 
-          if (feature.geometry.type === "LineString") {
-            const coords = feature.geometry.coordinates as [number, number][];
+          if (geom.type === "LineString") {
+            const coords = geom.coordinates as [number, number][];
             if (!coords || coords.length < 2) continue;
+
             const thinned = thinCoordinates(coords, 8);
 
             features.push({
@@ -78,8 +78,8 @@ export default function App() {
               },
               properties: baseProps,
             });
-          } else if (feature.geometry.type === "MultiLineString") {
-            const lines = feature.geometry.coordinates as [number, number][][];
+          } else if (geom.type === "MultiLineString") {
+            const lines = geom.coordinates as [number, number][][];
 
             for (const line of lines) {
               if (!line || line.length < 2) continue;
@@ -99,13 +99,15 @@ export default function App() {
       }
     }
 
-    if (features.length === 0) return null;
+    if (!features.length) return null;
 
     return {
       type: "FeatureCollection",
       features,
     };
-  }, [events]);
+  },
+  [events]
+);
 
   // Load event data on mount
   useEffect(() => {
