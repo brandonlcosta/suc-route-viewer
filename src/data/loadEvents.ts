@@ -1,5 +1,5 @@
 /**
- * src/data/loadEvents.ts — SUC HQ Unified Loader (v2.2)
+ * src/data/loadEvents.ts — SUC HQ Unified Loader (v2.3)
  *
  * Responsibilities:
  *  - Load multi-event catalog (/events.json)
@@ -48,7 +48,7 @@ export interface SUCEvent {
   eventDate?: string;
   eventTime?: string;
 
-  // New: explicit start location fields (match events.json)
+  // Explicit start location fields (match events.json)
   startLocationName?: string;
   startLocationUrl?: string;
 
@@ -195,6 +195,19 @@ async function loadRoute(
 
 //
 // ─────────────────────────────────────────────────────────────
+// Helpers for event ordering (newest → oldest)
+// ─────────────────────────────────────────────────────────────
+//
+
+function extractEventNumber(eventId: string): number | null {
+  const numeric = eventId.replace(/\D/g, "");
+  if (!numeric) return null;
+  const parsed = parseInt(numeric, 10);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+//
+// ─────────────────────────────────────────────────────────────
 // Load the entire SUC event catalog
 // ─────────────────────────────────────────────────────────────
 //
@@ -236,8 +249,20 @@ export async function loadSUCEvents(): Promise<SUCEventCatalog> {
     });
   }
 
-  // Deterministic event ordering
-  catalog.sort((a, b) => a.eventId.localeCompare(b.eventId));
+  // Deterministic event ordering:
+  //   - Newest → oldest using numeric portion of eventId (e.g. "SUC 024" → 24)
+  //   - If numeric parse fails, fall back to descending lexicographic order
+  catalog.sort((a, b) => {
+    const numA = extractEventNumber(a.eventId);
+    const numB = extractEventNumber(b.eventId);
+
+    if (numA != null && numB != null && numA !== numB) {
+      return numB - numA; // highest number (newest) first
+    }
+
+    // Fallback: reverse lexicographic so "SUC 024" still comes before "SUC 023"
+    return b.eventId.localeCompare(a.eventId);
+  });
 
   return catalog;
 }

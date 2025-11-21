@@ -456,37 +456,74 @@ export default function MultiRouteMap({
   }, [selectedRoute]);
 
   // 5. LIVE GPS DOT
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
+useEffect(() => {
+  const map = mapRef.current;
+  if (!map) return;
 
-    const cleanupLayerAndSource = () => {
-      const m = mapRef.current;
-      if (!m) return;
-      if (m.getLayer(ID.gpsLayer)) m.removeLayer(ID.gpsLayer);
-      if (m.getSource(ID.gpsSrc)) m.removeSource(ID.gpsSrc);
-    };
+  const cleanupLayerAndSource = () => {
+    const m = mapRef.current;
+    if (!m) return;
+    if (m.getLayer(ID.gpsLayer)) m.removeLayer(ID.gpsLayer);
+    if (m.getSource(ID.gpsSrc)) m.removeSource(ID.gpsSrc);
+  };
 
-    // If turning OFF: clear watch + remove layer/source
-    if (!isLiveGpsOn) {
-      if (gpsWatchIdRef.current != null && "geolocation" in navigator) {
-        navigator.geolocation.clearWatch(gpsWatchIdRef.current);
-        gpsWatchIdRef.current = null;
+  const recenterOnSelectedRoute = () => {
+    const m = mapRef.current;
+    if (!m || !selectedRoute || !selectedRoute.geojson) return;
+
+    try {
+      // assume the main line is the first feature
+      const feature = selectedRoute.geojson.features[0];
+      if (
+        !feature ||
+        feature.geometry.type !== "LineString" ||
+        !Array.isArray(feature.geometry.coordinates)
+      ) {
+        return;
       }
-      return withStyleLoaded(map, () => {
-        cleanupLayerAndSource();
+
+      const coords = feature.geometry
+        .coordinates as [number, number][];
+
+      if (!coords.length) return;
+
+      const bounds = coords.reduce((b, [lng, lat]) => {
+        return b.extend([lng, lat]);
+      }, new maplibregl.LngLatBounds(coords[0], coords[0]));
+
+      m.fitBounds(bounds, {
+        padding: 80,
+        duration: 800,
       });
+    } catch (err) {
+      console.warn("[SUC] Failed to recenter on route:", err);
+    }
+  };
+
+  // If turning OFF: clear watch + remove layer/source + recenter on route
+  if (!isLiveGpsOn) {
+    if (gpsWatchIdRef.current != null && "geolocation" in navigator) {
+      navigator.geolocation.clearWatch(gpsWatchIdRef.current);
+      gpsWatchIdRef.current = null;
     }
 
-    // If turning ON: start watching position
-    if (!("geolocation" in navigator)) {
-      console.warn("[SUC] Geolocation not supported in this browser.");
-      return;
-    }
-
-    withStyleLoaded(map, () => {
+    return withStyleLoaded(map, () => {
       cleanupLayerAndSource();
+      recenterOnSelectedRoute();
+    });
+  }
 
+  // If turning ON: start watching position
+  if (!("geolocation" in navigator)) {
+    console.warn("[SUC] Geolocation not supported in this browser.");
+    return;
+  }
+
+  withStyleLoaded(map, () => {
+    // reset any old GPS layer/source
+    cleanupLayerAndSource();
+
+    if (!map.getSource(ID.gpsSrc)) {
       map.addSource(ID.gpsSrc, {
         type: "geojson",
         data: {
@@ -494,7 +531,9 @@ export default function MultiRouteMap({
           features: [],
         },
       });
+    }
 
+    if (!map.getLayer(ID.gpsLayer)) {
       map.addLayer({
         id: ID.gpsLayer,
         type: "circle",
@@ -502,57 +541,64 @@ export default function MultiRouteMap({
         paint: {
           "circle-radius": 5,
           "circle-color": "#00d4ff",
-          "line-opacity": 1,
+          "circle-opacity": 1,
           "circle-stroke-width": 2,
           "circle-stroke-color": "#ffffff",
         },
       });
-    });
+    }
+  });
 
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        const { latitude, longitude } = pos.coords;
-        const src = map.getSource(
-          ID.gpsSrc
-        ) as maplibregl.GeoJSONSource | undefined;
-        if (!src) return;
+  // start watching position and update dot + recenter on user
+  gpsWatchIdRef.current = navigator.geolocation.watchPosition(
+    (pos) => {
+      const { longitude, latitude } = pos.coords;
+      const m = mapRef.current;
+      if (!m) return;
 
-        src.setData({
-          type: "FeatureCollection",
-          features: [
-            {
-              type: "Feature",
-              geometry: {
-                type: "Point",
-                coordinates: [longitude, latitude],
-              },
-              properties: {},
+      const src = m.getSource(ID.gpsSrc) as
+        | maplibregl.GeoJSONSource
+        | undefined;
+      if (!src) return;
+
+      src.setData({
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            geometry: {
+              type: "Point",
+              coordinates: [longitude, latitude],
             },
-          ],
-        });
-      },
-      (err) => {
-        console.warn("[SUC] Geolocation error:", err);
-      },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 5000,
-        timeout: 20000,
-      }
-    );
-
-    gpsWatchIdRef.current = watchId;
-
-    return () => {
-      if (gpsWatchIdRef.current != null && "geolocation" in navigator) {
-        navigator.geolocation.clearWatch(gpsWatchIdRef.current);
-        gpsWatchIdRef.current = null;
-      }
-      withStyleLoaded(map, () => {
-        cleanupLayerAndSource();
+            properties: {},
+          },
+        ],
       });
-    };
-  }, [isLiveGpsOn]);
+
+      m.easeTo({
+        center: [longitude, latitude],
+        duration: 800,
+      });
+    },
+    (err) => {
+      console.warn("[SUC] Geolocation error:", err);
+    },
+    {
+      enableHighAccuracy: true,
+      maximumAge: 1000,
+      timeout: 10000,
+    }
+  );
+
+  // safety cleanup if effect re-runs / unmounts
+  return () => {
+    if (gpsWatchIdRef.current != null && "geolocation" in navigator) {
+      navigator.geolocation.clearWatch(gpsWatchIdRef.current);
+      gpsWatchIdRef.current = null;
+    }
+  };
+}, [isLiveGpsOn, selectedRoute]);
+
 
   // 6. PLAYBACK DOT ALONG SELECTED ROUTE
   useEffect(() => {

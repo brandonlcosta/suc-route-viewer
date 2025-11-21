@@ -84,6 +84,7 @@ export default function App() {
 
   // Live GPS toggle
   const [isLiveGpsOn, setIsLiveGpsOn] = useState(false);
+  console.log("App isLiveGpsOn:", isLiveGpsOn);
 
   // Playback state
   const [isPlaybackOn, setIsPlaybackOn] = useState(false);
