@@ -8,8 +8,6 @@ import type { SUCEvent, SUCRoute } from "./data/loadEvents";
 import type { FeatureCollection, LineString } from "geojson";
 import "./styles.css";
 
-
-
 function thinCoordinates(
   coords: [number, number][],
   step: number
@@ -24,6 +22,59 @@ function thinCoordinates(
     result.push(last);
   }
   return result;
+}
+
+// Parse event.eventDate into a timestamp (ms since epoch)
+function getEventTimestamp(ev: SUCEvent): number | null {
+  if (!ev.eventDate) return null;
+  const ts = Date.parse(ev.eventDate);
+  if (Number.isNaN(ts)) return null;
+  return ts;
+}
+
+// Choose the "scheduled" event based on today's date:
+function pickDefaultEventByDate(events: SUCEvent[]): SUCEvent | null {
+  if (!events.length) return null;
+
+  const now = Date.now();
+  let upcoming: { ev: SUCEvent; diff: number } | null = null;
+  let recentPast: { ev: SUCEvent; diff: number } | null = null;
+
+  for (const ev of events) {
+    const ts = getEventTimestamp(ev);
+    if (ts == null) continue;
+
+    const diff = ts - now;
+
+    if (diff >= 0) {
+      // future event
+      if (!upcoming || diff < upcoming.diff) {
+        upcoming = { ev, diff };
+      }
+    } else {
+      // past event
+      const abs = Math.abs(diff);
+      if (!recentPast || abs < recentPast.diff) {
+        recentPast = { ev, diff: abs };
+      }
+    }
+  }
+
+  if (upcoming) return upcoming.ev;
+  if (recentPast) return recentPast.ev;
+  return events[0] ?? null;
+}
+
+// Choose the default route for an event: prefer "XL", else longest distance
+function pickDefaultRoute(event: SUCEvent | null): SUCRoute | null {
+  if (!event || !event.routes.length) return null;
+
+  const xl = event.routes.find((r) => r.label === "XL");
+  if (xl) return xl;
+
+  return event.routes.reduce((best, r) =>
+    !best || r.distanceMi > best.distanceMi ? r : best
+  );
 }
 
 export default function App() {
@@ -43,47 +94,32 @@ export default function App() {
 
   // Permanent ghost layer — all SUC routes as a low-opacity underlay
   const permanentRoutesGeoJson = useMemo<FeatureCollection<LineString> | null>(
-  () => {
-    if (!events.length) return null;
+    () => {
+      if (!events.length) return null;
 
-    const features: FeatureCollection<LineString>["features"] = [];
+      const features: FeatureCollection<LineString>["features"] = [];
 
-    for (const event of events) {
-      for (const route of event.routes) {
-        const fc = route.geojson;
-        if (!fc || !Array.isArray(fc.features)) continue;
+      for (const event of events) {
+        for (const route of event.routes) {
+          const fc = route.geojson;
+          if (!fc || !Array.isArray(fc.features)) continue;
 
-        for (const rawFeature of fc.features as any[]) {
-          const geom = rawFeature.geometry;
-          if (!geom) continue;
+          for (const rawFeature of fc.features as any[]) {
+            const geom = rawFeature.geometry;
+            if (!geom) continue;
 
-          const baseProps = {
-            eventId: event.eventId,
-            eventName: event.eventName,
-            routeId: route.id,
-            routeName: route.name,
-          };
+            const baseProps = {
+              eventId: event.eventId,
+              eventName: event.eventName,
+              routeId: route.id,
+              routeName: route.name,
+            };
 
-          if (geom.type === "LineString") {
-            const coords = geom.coordinates as [number, number][];
-            if (!coords || coords.length < 2) continue;
+            if (geom.type === "LineString") {
+              const coords = geom.coordinates as [number, number][];
+              if (!coords || coords.length < 2) continue;
 
-            const thinned = thinCoordinates(coords, 8);
-
-            features.push({
-              type: "Feature",
-              geometry: {
-                type: "LineString",
-                coordinates: thinned,
-              },
-              properties: baseProps,
-            });
-          } else if (geom.type === "MultiLineString") {
-            const lines = geom.coordinates as [number, number][][];
-
-            for (const line of lines) {
-              if (!line || line.length < 2) continue;
-              const thinned = thinCoordinates(line, 8);
+              const thinned = thinCoordinates(coords, 8);
 
               features.push({
                 type: "Feature",
@@ -93,21 +129,36 @@ export default function App() {
                 },
                 properties: baseProps,
               });
+            } else if (geom.type === "MultiLineString") {
+              const lines = geom.coordinates as [number, number][][];
+
+              for (const line of lines) {
+                if (!line || line.length < 2) continue;
+                const thinned = thinCoordinates(line, 8);
+
+                features.push({
+                  type: "Feature",
+                  geometry: {
+                    type: "LineString",
+                    coordinates: thinned,
+                  },
+                  properties: baseProps,
+                });
+              }
             }
           }
         }
       }
-    }
 
-    if (!features.length) return null;
+      if (!features.length) return null;
 
-    return {
-      type: "FeatureCollection",
-      features,
-    };
-  },
-  [events]
-);
+      return {
+        type: "FeatureCollection",
+        features,
+      };
+    },
+    [events]
+  );
 
   // Load event data on mount
   useEffect(() => {
@@ -116,9 +167,11 @@ export default function App() {
       setEvents(loaded);
 
       if (loaded.length > 0) {
-        const firstEvent = loaded[0];
-        setActiveEventId(firstEvent.eventId);
-        setSelectedRouteId(firstEvent.routes[0]?.id ?? null);
+        const defaultEvent = pickDefaultEventByDate(loaded) ?? loaded[0];
+        setActiveEventId(defaultEvent.eventId);
+
+        const defaultRoute = pickDefaultRoute(defaultEvent);
+        setSelectedRouteId(defaultRoute ? defaultRoute.id : null);
       }
     }
 
@@ -129,8 +182,9 @@ export default function App() {
 
   // Active event object
   const activeEvent: SUCEvent | null = useMemo(() => {
-    if (events.length === 0) return null;
-    return events.find((e) => e.eventId === activeEventId) ?? events[0];
+    if (!events.length) return null;
+    const ev = events.find((e) => e.eventId === activeEventId) ?? events[0];
+    return ev ? { ...ev } : null; // force new object reference for map effects if needed
   }, [events, activeEventId]);
 
   // Selected route object
@@ -152,7 +206,7 @@ export default function App() {
 
     const baseDurationSeconds = 60; // MED: ~60s for full route
     const speedMult =
-      playbackSpeed === "slow" ? 2 : playbackSpeed === "fast" ? .25 : 1;
+      playbackSpeed === "slow" ? 2 : playbackSpeed === "fast" ? 0.25 : 1;
 
     const tick = (now: number) => {
       const dt = (now - lastTime) / 1000;
@@ -160,7 +214,8 @@ export default function App() {
 
       setPlaybackProgress((prev) => {
         const routeDistance = selectedRoute.distanceMi || 1;
-        const duration = baseDurationSeconds * (routeDistance / 10) * speedMult;
+        const duration =
+          baseDurationSeconds * (routeDistance / 10) * speedMult;
 
         const delta = dt / duration;
         const next = prev + delta;
@@ -191,12 +246,12 @@ export default function App() {
   };
 
   const handleEventSelect = (eventId: string) => {
+    const ev = events.find((e) => e.eventId === eventId) ?? null;
+    const defaultRoute = pickDefaultRoute(ev);
+    const newRouteId = defaultRoute ? defaultRoute.id : null;
+
     setActiveEventId(eventId);
-
-    const ev = events.find((e) => e.eventId === eventId);
-    const firstRoute = ev?.routes[0];
-    setSelectedRouteId(firstRoute ? firstRoute.id : null);
-
+    setSelectedRouteId(newRouteId);
     resetPlayback();
   };
 
@@ -414,10 +469,8 @@ export default function App() {
                   <div className="suc-route-detail-titleblock">
                     <span className="suc-route-detail-stats">
                       {selectedRoute.distanceMi.toFixed(1)} mi ·{" "}
-                      {Math.round(
-                        selectedRoute.elevationFt
-                      ).toLocaleString()}{" "}
-                      ft ↑
+                      {Math.round(selectedRoute.elevationFt).toLocaleString()} ft
+                      {" "}↑
                     </span>
                   </div>
                 </div>

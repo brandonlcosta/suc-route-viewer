@@ -64,6 +64,9 @@ export default function MultiRouteMap({
   // Flattened coordinates for the currently selected route
   const playbackCoordsRef = useRef<[number, number][]>([]);
 
+  // NEW: track whether this is the first route draw for this map instance
+  const firstRouteFitDoneRef = useRef(false);
+
   // Utility: run once style is loaded
   function withStyleLoaded(map: maplibregl.Map, fn: () => void) {
     if (map.isStyleLoaded()) {
@@ -158,10 +161,12 @@ export default function MultiRouteMap({
 
       // Filter out the currently active event so we don't double-draw it
       if (event) {
-        const filteredFeatures = permanentRoutesGeoJson.features.filter((f: any) => {
-          const props = (f.properties || {}) as { eventId?: string };
-          return props.eventId !== event.eventId;
-        });
+        const filteredFeatures = permanentRoutesGeoJson.features.filter(
+          (f: any) => {
+            const props = (f.properties || {}) as { eventId?: string };
+            return props.eventId !== event.eventId;
+          }
+        );
 
         dataToUse = {
           type: "FeatureCollection",
@@ -202,7 +207,6 @@ export default function MultiRouteMap({
       }
     });
   }, [permanentRoutesGeoJson, event]);
-
 
   // 3. BASE ROUTE UNDERLAY FOR ACTIVE EVENT + FIT TO EVENT
   useEffect(() => {
@@ -263,19 +267,20 @@ export default function MultiRouteMap({
     if (!map) return;
 
     return withStyleLoaded(map, () => {
-      // Clear old selected route + POIs + playback
-      [ID.selectedGlow, ID.selectedLine, ID.poiLayer, ID.playbackLayer].forEach(
-        (layerId) => {
-          if (map.getLayer(layerId)) map.removeLayer(layerId);
+      // If no selectedRoute, clear playback + (optionally) selected layer
+      if (!selectedRoute || !selectedRoute.geojson) {
+        playbackCoordsRef.current = [];
+        const playbackSrc = map.getSource(
+          ID.playbackSrc
+        ) as maplibregl.GeoJSONSource | undefined;
+        if (playbackSrc) {
+          playbackSrc.setData({
+            type: "FeatureCollection",
+            features: [],
+          });
         }
-      );
-      [ID.selectedSrc, ID.poiSrc, ID.playbackSrc].forEach((srcId) => {
-        if (map.getSource(srcId)) map.removeSource(srcId);
-      });
-
-      playbackCoordsRef.current = [];
-
-      if (!selectedRoute || !selectedRoute.geojson) return;
+        return;
+      }
 
       const fc = selectedRoute.geojson;
 
@@ -288,55 +293,72 @@ export default function MultiRouteMap({
           f.geometry.type === "LineString" ||
           f.geometry.type === "MultiLineString"
         ) {
-          lineFeatures.push(
-            f as Feature<Geometry, GeoJsonProperties>
-          );
+          lineFeatures.push(f as Feature<Geometry, GeoJsonProperties>);
         } else {
-          poiFeatures.push(
-            f as Feature<Geometry, GeoJsonProperties>
-          );
+          poiFeatures.push(f as Feature<Geometry, GeoJsonProperties>);
         }
       });
 
-      if (lineFeatures.length === 0) return;
+      if (lineFeatures.length === 0) {
+        // No line geometry, nothing to draw (don't blow away previous layers)
+        return;
+      }
 
       const mergedLines: FeatureCollection<Geometry, GeoJsonProperties> = {
         type: "FeatureCollection",
         features: lineFeatures,
       };
 
-      // Selected route geometry source
-      map.addSource(ID.selectedSrc, {
-        type: "geojson",
-        data: mergedLines,
-      });
+      // Selected route geometry source (update or add)
+      const existingSelectedSrc = map.getSource(
+        ID.selectedSrc
+      ) as maplibregl.GeoJSONSource | undefined;
+      if (existingSelectedSrc) {
+        existingSelectedSrc.setData(mergedLines as any);
+      } else {
+        map.addSource(ID.selectedSrc, {
+          type: "geojson",
+          data: mergedLines,
+        });
+      }
 
-      // Neon glow
-      map.addLayer({
-        id: ID.selectedGlow,
-        type: "line",
-        source: ID.selectedSrc,
-        paint: {
-          "line-color": selectedRoute.color,
-          "line-width": 10,
-          "line-opacity": 0.22,
-          "line-blur": 2.6,
-        },
-      });
+      // Neon glow layer (create once, just update paint if it exists)
+      if (!map.getLayer(ID.selectedGlow)) {
+        map.addLayer({
+          id: ID.selectedGlow,
+          type: "line",
+          source: ID.selectedSrc,
+          paint: {
+            "line-color": selectedRoute.color,
+            "line-width": 10,
+            "line-opacity": 0.22,
+            "line-blur": 2.6,
+          },
+        });
+      } else {
+        map.setPaintProperty(ID.selectedGlow, "line-color", selectedRoute.color);
+      }
 
       // Crisp center line
-      map.addLayer({
-        id: ID.selectedLine,
-        type: "line",
-        source: ID.selectedSrc,
-        paint: {
-          "line-color": selectedRoute.color,
-          "line-width": 2.4,
-          "line-opacity": 0.9,
-        },
-      });
+      if (!map.getLayer(ID.selectedLine)) {
+        map.addLayer({
+          id: ID.selectedLine,
+          type: "line",
+          source: ID.selectedSrc,
+          paint: {
+            "line-color": selectedRoute.color,
+            "line-width": 2.4,
+            "line-opacity": 0.9,
+          },
+        });
+      } else {
+        map.setPaintProperty(ID.selectedLine, "line-color", selectedRoute.color);
+      }
 
-      // POIs (if present)
+      // POIs — easiest to just rebuild this one
+      if (map.getLayer(ID.poiLayer)) map.removeLayer(ID.poiLayer);
+      if (map.getSource(ID.poiSrc)) map.removeSource(ID.poiSrc);
+
       if (poiFeatures.length > 0) {
         const poiCollection: FeatureCollection<Geometry, GeoJsonProperties> = {
           type: "FeatureCollection",
@@ -362,17 +384,19 @@ export default function MultiRouteMap({
         });
       }
 
-      // Fit camera to just the selected route
+      // Fit camera to the selected route ONLY the first time
       const bounds = new maplibregl.LngLatBounds();
       extendBoundsFromLines(bounds, mergedLines.features);
 
-      if (!bounds.isEmpty()) {
+      if (!bounds.isEmpty() && !firstRouteFitDoneRef.current) {
         map.fitBounds(bounds, {
           padding: 80,
           maxZoom: 14.5,
           duration: 800,
         });
+        firstRouteFitDoneRef.current = true;
       }
+
 
       // Flatten coords for playback
       const coords: [number, number][] = [];
@@ -391,26 +415,43 @@ export default function MultiRouteMap({
 
       playbackCoordsRef.current = coords;
 
-      // Empty playback dot source
-      map.addSource(ID.playbackSrc, {
-        type: "geojson",
-        data: {
-          type: "FeatureCollection",
-          features: [],
-        },
-      });
+      // Playback dot source (update or add, empty at first)
+      const playbackSrc = map.getSource(
+        ID.playbackSrc
+      ) as maplibregl.GeoJSONSource | undefined;
+      const emptyPlayback: FeatureCollection = {
+        type: "FeatureCollection",
+        features: [],
+      };
 
-      map.addLayer({
-        id: ID.playbackLayer,
-        type: "circle",
-        source: ID.playbackSrc,
-        paint: {
-          "circle-radius": 5,
-          "circle-color": selectedRoute.color,
-          "circle-stroke-width": 2,
-          "circle-stroke-color": "#ffffff",
-        },
-      });
+      if (playbackSrc) {
+        playbackSrc.setData(emptyPlayback);
+      } else {
+        map.addSource(ID.playbackSrc, {
+          type: "geojson",
+          data: emptyPlayback,
+        });
+      }
+
+      if (!map.getLayer(ID.playbackLayer)) {
+        map.addLayer({
+          id: ID.playbackLayer,
+          type: "circle",
+          source: ID.playbackSrc,
+          paint: {
+            "circle-radius": 5,
+            "circle-color": selectedRoute.color,
+            "circle-stroke-width": 2,
+            "circle-stroke-color": "#ffffff",
+          },
+        });
+      } else {
+        map.setPaintProperty(
+          ID.playbackLayer,
+          "circle-color",
+          selectedRoute.color
+        );
+      }
     });
   }, [selectedRoute]);
 
@@ -471,7 +512,9 @@ export default function MultiRouteMap({
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         const { latitude, longitude } = pos.coords;
-        const src = map.getSource(ID.gpsSrc) as maplibregl.GeoJSONSource | undefined;
+        const src = map.getSource(
+          ID.gpsSrc
+        ) as maplibregl.GeoJSONSource | undefined;
         if (!src) return;
 
         src.setData({
@@ -519,7 +562,9 @@ export default function MultiRouteMap({
     const coords = playbackCoordsRef.current;
     if (!coords || coords.length < 2) return;
 
-    const src = map.getSource(ID.playbackSrc) as maplibregl.GeoJSONSource | undefined;
+    const src = map.getSource(
+      ID.playbackSrc
+    ) as maplibregl.GeoJSONSource | undefined;
     if (!src) return;
 
     // If paused: dot at route start
