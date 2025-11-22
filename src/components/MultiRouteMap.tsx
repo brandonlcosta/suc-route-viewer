@@ -592,5 +592,12 @@ export default function MultiRouteMap({
     });
   }, [selectedRoute, playbackProgress, isPlaybackOn]);
 
+  // 6. SAFETY: force MapLibre to re-check container size after event/route changes
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    map.resize();
+  }, [event?.eventId, selectedRoute?.id]);
+
   return <div ref={containerRef} className="suc-map-inner" />;
 }
