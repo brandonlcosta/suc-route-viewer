@@ -28,25 +28,6 @@ function thinCoordinates(
   return result;
 }
 
-const ROUTE_LABEL_ORDER = ["MED", "LRG", "XL", "XXL"];
-
-function getRouteLabels(ev: SUCEvent): string[] {
-  if (!ev.routes || ev.routes.length === 0) return [];
-  const set = new Set<string>();
-  for (const r of ev.routes) {
-    if (r.label) set.add(r.label);
-  }
-  return Array.from(set).sort((a, b) => {
-    const ai = ROUTE_LABEL_ORDER.indexOf(a);
-    const bi = ROUTE_LABEL_ORDER.indexOf(b);
-    if (ai === -1 && bi === -1) return a.localeCompare(b);
-    if (ai === -1) return 1;
-    if (bi === -1) return -1;
-    return ai - bi;
-  });
-}
-
-
 // Choose the default route for an event: prefer "XL", else longest distance
 function pickDefaultRoute(event: SUCEvent | null): SUCRoute | null {
   if (!event || !event.routes.length) return null;
