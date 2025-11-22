@@ -106,18 +106,6 @@ function formatCalendarLabel(ev: SUCEvent): string {
   }); 
 }
 
-
-function formatPrettyEventDate(dateStr?: string): string | null {
-  if (!dateStr) return null;
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return dateStr;
-  return d.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
-}
-
 // ─────────────────────────────────────────────────────────────
 // Component
 // ─────────────────────────────────────────────────────────────
@@ -141,9 +129,7 @@ export default function App() {
   const [activeCalendarDayKey, setActiveCalendarDayKey] = useState<
     string | null
   >(null);
-  const [overlayCalendarEvents, setOverlayCalendarEvents] = useState<
-    SUCEvent[] | null
-  >(null);
+
   const calendarStripRef = useRef<HTMLDivElement | null>(null);
 
   const isLoading = events.length === 0;
@@ -390,22 +376,31 @@ export default function App() {
     });
   }, [activeCalendarDayKey, calendarDays.length]);
 
-  const handleCalendarDayClick = (dayKey: string) => {
-    setActiveCalendarDayKey(dayKey);
-    const day = calendarDays.find((d) => d.key === dayKey);
-    if (day) {
-      setOverlayCalendarEvents(day.events);
-      // Optional: also switch the main event to the first one on that day
-      const first = day.events[0];
-      if (first) {
-        handleEventSelect(first.eventId);
-      }
-    }
-  };
+function handleCalendarDayClick(dayKey: string) {
+  setActiveCalendarDayKey(dayKey);
 
-  const closeCalendarOverlay = () => {
-    setOverlayCalendarEvents(null);
-  };
+  const day = calendarDays.find((d) => d.key === dayKey);
+  if (!day) return;
+
+  const firstEv = day.events[0];
+  if (!firstEv) return;
+
+  // Set the active event for the map
+  setActiveEventId(firstEv.eventId);
+
+  // Optionally auto-select its XL / default route
+  const defaultRoute =
+    firstEv.routes.find((r) => r.label === "XL") ?? firstEv.routes[0];
+
+  if (defaultRoute) {
+    setSelectedRouteId(defaultRoute.id);
+  }
+
+  // 🔥 and we REMOVE this:
+  // setOverlayCalendarEvents(day.events);
+}
+
+
 
   // ───────────────────────────────────────────────────────────
   // Render
