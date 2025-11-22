@@ -61,11 +61,11 @@ export default function MultiRouteMap({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const gpsWatchIdRef = useRef<number | null>(null);
 
-  // Flattened coordinates for the currently selected route
+  // Flattened coordinates for the currently selected route (for playback)
   const playbackCoordsRef = useRef<[number, number][]>([]);
 
-  // NEW: track whether this is the first route draw for this map instance
-  const firstRouteFitDoneRef = useRef(false);
+  // Track last event we transitioned to (for smooth event→event cam)
+  const lastFittedEventIdRef = useRef<string | null>(null);
 
   // Utility: run once style is loaded
   function withStyleLoaded(map: maplibregl.Map, fn: () => void) {
@@ -76,25 +76,6 @@ export default function MultiRouteMap({
     const handler = () => fn();
     map.once("styledata", handler);
     return () => map.off("styledata", handler);
-  }
-
-  // Utility: compute bounds from a FeatureCollection of LineString / MultiLineString
-  function extendBoundsFromLines(
-    bounds: maplibregl.LngLatBounds,
-    features: Feature<Geometry, GeoJsonProperties>[]
-  ) {
-    features.forEach((f) => {
-      if (!f.geometry) return;
-      if (f.geometry.type === "LineString") {
-        (f.geometry.coordinates as [number, number][]).forEach((c) =>
-          bounds.extend(c)
-        );
-      } else if (f.geometry.type === "MultiLineString") {
-        (f.geometry.coordinates as [number, number][][]).forEach((line) =>
-          line.forEach((c) => bounds.extend(c))
-        );
-      }
-    });
   }
 
   // Utility: add/update a GeoJSON source
@@ -146,7 +127,6 @@ export default function MultiRouteMap({
   useEffect(() => {
     const map = mapRef.current;
 
-    // If we lose data or the map, remove the ghost layer entirely
     if (!map || !permanentRoutesGeoJson) {
       if (map) {
         if (map.getLayer(ID.permanentLayer)) map.removeLayer(ID.permanentLayer);
@@ -156,10 +136,8 @@ export default function MultiRouteMap({
     }
 
     return withStyleLoaded(map, () => {
-      // Start with all routes
       let dataToUse: FeatureCollection<LineString> = permanentRoutesGeoJson;
 
-      // Filter out the currently active event so we don't double-draw it
       if (event) {
         const filteredFeatures = permanentRoutesGeoJson.features.filter(
           (f: any) => {
@@ -174,17 +152,14 @@ export default function MultiRouteMap({
         };
       }
 
-      // If there are no "other" events, remove ghost layer and bail
       if (!dataToUse.features.length) {
         if (map.getLayer(ID.permanentLayer)) map.removeLayer(ID.permanentLayer);
         if (map.getSource(ID.permanentSrc)) map.removeSource(ID.permanentSrc);
         return;
       }
 
-      // Use your helper to add/update the source
       setGeoJsonSource(map, ID.permanentSrc, dataToUse);
 
-      // Add the layer once, re-use it on updates
       if (!map.getLayer(ID.permanentLayer)) {
         const layerDefinition = {
           id: ID.permanentLayer,
@@ -198,92 +173,82 @@ export default function MultiRouteMap({
           },
         };
 
-        // Keep ghosts under the event underlay if that exists
-        if (map.getLayer(ID.baseLayer)) {
-          map.addLayer(layerDefinition, ID.baseLayer);
-        } else {
-          map.addLayer(layerDefinition);
-        }
+        map.addLayer(layerDefinition);
       }
     });
-  }, [permanentRoutesGeoJson, event]);
+  }, [permanentRoutesGeoJson, event?.eventId]);
 
-  // 3. BASE ROUTE UNDERLAY FOR ACTIVE EVENT + FIT TO EVENT
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !event) return;
-
-    return withStyleLoaded(map, () => {
-      if (map.getLayer(ID.baseLayer)) map.removeLayer(ID.baseLayer);
-      if (map.getSource(ID.baseSrc)) map.removeSource(ID.baseSrc);
-
-      const features: Feature<Geometry, GeoJsonProperties>[] = [];
-
-      event.routes.forEach((route) => {
-        const fc = route.geojson;
-        if (!fc || !Array.isArray(fc.features)) return;
-
-        fc.features.forEach((f) =>
-          features.push(f as Feature<Geometry, GeoJsonProperties>)
-        );
-      });
-
-      if (features.length === 0) return;
-
-      const merged: FeatureCollection<Geometry, GeoJsonProperties> = {
-        type: "FeatureCollection",
-        features,
-      };
-
-      map.addSource(ID.baseSrc, { type: "geojson", data: merged });
-
-      map.addLayer({
-        id: ID.baseLayer,
-        type: "line",
-        source: ID.baseSrc,
-        paint: {
-          "line-color": "#7a7a96",
-          "line-width": 1.4,
-          "line-opacity": 0.35,
-        },
-      });
-
-      const bounds = new maplibregl.LngLatBounds();
-      extendBoundsFromLines(bounds, merged.features);
-
-      if (!bounds.isEmpty()) {
-        map.fitBounds(bounds, {
-          padding: 70,
-          maxZoom: 13,
-          duration: 900,
-        });
-      }
-    });
-  }, [event]);
-
-  // 4. SELECTED ROUTE HIGHLIGHT + FIT TO ROUTE + PREP PLAYBACK COORDS
+  // 3. BASE UNDERLAY + SELECTED ROUTE + POIs + BOUNDS (single refresh pass)
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
+    console.log("[SUC] MultiRouteMap refresh:", {
+      eventId: event?.eventId,
+      selectedRouteId: selectedRoute?.id,
+      selectedLabel: selectedRoute?.label,
+    });
+
     return withStyleLoaded(map, () => {
-      // If no selectedRoute, clear playback + (optionally) selected layer
-      if (!selectedRoute || !selectedRoute.geojson) {
-        playbackCoordsRef.current = [];
-        const playbackSrc = map.getSource(
-          ID.playbackSrc
-        ) as maplibregl.GeoJSONSource | undefined;
-        if (playbackSrc) {
-          playbackSrc.setData({
-            type: "FeatureCollection",
-            features: [],
-          });
-        }
-        return;
+      // Clear all route-specific layers/sources (but NOT permanent ghost layer)
+      const layersToRemove = [
+        ID.baseLayer,
+        ID.selectedGlow,
+        ID.selectedLine,
+        ID.poiLayer,
+        ID.playbackLayer,
+      ];
+      const sourcesToRemove = [
+        ID.baseSrc,
+        ID.selectedSrc,
+        ID.poiSrc,
+        ID.playbackSrc,
+      ];
+
+      layersToRemove.forEach((layerId) => {
+        if (map.getLayer(layerId)) map.removeLayer(layerId);
+      });
+      sourcesToRemove.forEach((sourceId) => {
+        if (map.getSource(sourceId)) map.removeSource(sourceId);
+      });
+      playbackCoordsRef.current = [];
+
+      if (!event) return;
+
+      // 🔹 1) Base underlay: all routes for this event (gray)
+      const baseFeatures: Feature<Geometry, GeoJsonProperties>[] = [];
+      event.routes.forEach((route) => {
+        const fc = route.geojson;
+        if (!fc || !Array.isArray(fc.features)) return;
+        fc.features.forEach((f) =>
+          baseFeatures.push(f as Feature<Geometry, GeoJsonProperties>)
+        );
+      });
+
+      if (baseFeatures.length) {
+        const mergedBase: FeatureCollection<Geometry, GeoJsonProperties> = {
+          type: "FeatureCollection",
+          features: baseFeatures,
+        };
+
+        map.addSource(ID.baseSrc, { type: "geojson", data: mergedBase });
+
+        map.addLayer({
+          id: ID.baseLayer,
+          type: "line",
+          source: ID.baseSrc,
+          paint: {
+            "line-color": "#7a7a96",
+            "line-width": 1.4,
+            "line-opacity": 0.35,
+          },
+        });
       }
 
-      const fc = selectedRoute.geojson;
+      // 🔹 2) Selected route highlight + POIs
+      if (!selectedRoute || !selectedRoute.geojson) return;
 
+      const fc = selectedRoute.geojson;
       const lineFeatures: Feature<Geometry, GeoJsonProperties>[] = [];
       const poiFeatures: Feature<Geometry, GeoJsonProperties>[] = [];
 
@@ -299,67 +264,42 @@ export default function MultiRouteMap({
         }
       });
 
-      if (lineFeatures.length === 0) {
-        // No line geometry, nothing to draw (don't blow away previous layers)
-        return;
-      }
+      if (!lineFeatures.length) return;
 
       const mergedLines: FeatureCollection<Geometry, GeoJsonProperties> = {
         type: "FeatureCollection",
         features: lineFeatures,
       };
 
-      // Selected route geometry source (update or add)
-      const existingSelectedSrc = map.getSource(
-        ID.selectedSrc
-      ) as maplibregl.GeoJSONSource | undefined;
-      if (existingSelectedSrc) {
-        existingSelectedSrc.setData(mergedLines as any);
-      } else {
-        map.addSource(ID.selectedSrc, {
-          type: "geojson",
-          data: mergedLines,
-        });
-      }
+      map.addSource(ID.selectedSrc, {
+        type: "geojson",
+        data: mergedLines,
+      });
 
-      // Neon glow layer (create once, just update paint if it exists)
-      if (!map.getLayer(ID.selectedGlow)) {
-        map.addLayer({
-          id: ID.selectedGlow,
-          type: "line",
-          source: ID.selectedSrc,
-          paint: {
-            "line-color": selectedRoute.color,
-            "line-width": 10,
-            "line-opacity": 0.22,
-            "line-blur": 2.6,
-          },
-        });
-      } else {
-        map.setPaintProperty(ID.selectedGlow, "line-color", selectedRoute.color);
-      }
+      map.addLayer({
+        id: ID.selectedGlow,
+        type: "line",
+        source: ID.selectedSrc,
+        paint: {
+          "line-color": selectedRoute.color,
+          "line-width": 10,
+          "line-opacity": 0.22,
+          "line-blur": 2.6,
+        },
+      });
 
-      // Crisp center line
-      if (!map.getLayer(ID.selectedLine)) {
-        map.addLayer({
-          id: ID.selectedLine,
-          type: "line",
-          source: ID.selectedSrc,
-          paint: {
-            "line-color": selectedRoute.color,
-            "line-width": 2.4,
-            "line-opacity": 0.9,
-          },
-        });
-      } else {
-        map.setPaintProperty(ID.selectedLine, "line-color", selectedRoute.color);
-      }
+      map.addLayer({
+        id: ID.selectedLine,
+        type: "line",
+        source: ID.selectedSrc,
+        paint: {
+          "line-color": selectedRoute.color,
+          "line-width": 2.4,
+          "line-opacity": 0.9,
+        },
+      });
 
-      // POIs — easiest to just rebuild this one
-      if (map.getLayer(ID.poiLayer)) map.removeLayer(ID.poiLayer);
-      if (map.getSource(ID.poiSrc)) map.removeSource(ID.poiSrc);
-
-      if (poiFeatures.length > 0) {
+      if (poiFeatures.length) {
         const poiCollection: FeatureCollection<Geometry, GeoJsonProperties> = {
           type: "FeatureCollection",
           features: poiFeatures,
@@ -384,21 +324,30 @@ export default function MultiRouteMap({
         });
       }
 
-      // Fit camera to the selected route ONLY the first time
+      // 🔹 3) Compute bounds for selected route & smooth fit
       const bounds = new maplibregl.LngLatBounds();
-      extendBoundsFromLines(bounds, mergedLines.features);
+      mergedLines.features.forEach((f) => {
+        if (!f.geometry) return;
+        if (f.geometry.type === "LineString") {
+          (f.geometry.coordinates as [number, number][]).forEach((c) =>
+            bounds.extend(c)
+          );
+        } else if (f.geometry.type === "MultiLineString") {
+          (f.geometry.coordinates as [number, number][][]).forEach((line) =>
+            line.forEach((c) => bounds.extend(c))
+          );
+        }
+      });
 
-      if (!bounds.isEmpty() && !firstRouteFitDoneRef.current) {
+      if (!bounds.isEmpty()) {
         map.fitBounds(bounds, {
           padding: 80,
           maxZoom: 14.5,
-          duration: 800,
+          duration: 750,
         });
-        firstRouteFitDoneRef.current = true;
       }
 
-
-      // Flatten coords for playback
+      // 🔹 4) Flatten coords for playback
       const coords: [number, number][] = [];
       mergedLines.features.forEach((f) => {
         if (!f.geometry) return;
@@ -412,195 +361,241 @@ export default function MultiRouteMap({
           );
         }
       });
-
       playbackCoordsRef.current = coords;
 
-      // Playback dot source (update or add, empty at first)
-      const playbackSrc = map.getSource(
-        ID.playbackSrc
-      ) as maplibregl.GeoJSONSource | undefined;
-      const emptyPlayback: FeatureCollection = {
-        type: "FeatureCollection",
-        features: [],
-      };
-
-      if (playbackSrc) {
-        playbackSrc.setData(emptyPlayback);
-      } else {
-        map.addSource(ID.playbackSrc, {
-          type: "geojson",
-          data: emptyPlayback,
-        });
-      }
-
-      if (!map.getLayer(ID.playbackLayer)) {
-        map.addLayer({
-          id: ID.playbackLayer,
-          type: "circle",
-          source: ID.playbackSrc,
-          paint: {
-            "circle-radius": 5,
-            "circle-color": selectedRoute.color,
-            "circle-stroke-width": 2,
-            "circle-stroke-color": "#ffffff",
-          },
-        });
-      } else {
-        map.setPaintProperty(
-          ID.playbackLayer,
-          "circle-color",
-          selectedRoute.color
-        );
-      }
-    });
-  }, [selectedRoute]);
-
-  // 5. LIVE GPS DOT
-useEffect(() => {
-  const map = mapRef.current;
-  if (!map) return;
-
-  const cleanupLayerAndSource = () => {
-    const m = mapRef.current;
-    if (!m) return;
-    if (m.getLayer(ID.gpsLayer)) m.removeLayer(ID.gpsLayer);
-    if (m.getSource(ID.gpsSrc)) m.removeSource(ID.gpsSrc);
-  };
-
-  const recenterOnSelectedRoute = () => {
-    const m = mapRef.current;
-    if (!m || !selectedRoute || !selectedRoute.geojson) return;
-
-    try {
-      // assume the main line is the first feature
-      const feature = selectedRoute.geojson.features[0];
-      if (
-        !feature ||
-        feature.geometry.type !== "LineString" ||
-        !Array.isArray(feature.geometry.coordinates)
-      ) {
-        return;
-      }
-
-      const coords = feature.geometry
-        .coordinates as [number, number][];
-
-      if (!coords.length) return;
-
-      const bounds = coords.reduce((b, [lng, lat]) => {
-        return b.extend([lng, lat]);
-      }, new maplibregl.LngLatBounds(coords[0], coords[0]));
-
-      m.fitBounds(bounds, {
-        padding: 80,
-        duration: 800,
-      });
-    } catch (err) {
-      console.warn("[SUC] Failed to recenter on route:", err);
-    }
-  };
-
-  // If turning OFF: clear watch + remove layer/source + recenter on route
-  if (!isLiveGpsOn) {
-    if (gpsWatchIdRef.current != null && "geolocation" in navigator) {
-      navigator.geolocation.clearWatch(gpsWatchIdRef.current);
-      gpsWatchIdRef.current = null;
-    }
-
-    return withStyleLoaded(map, () => {
-      cleanupLayerAndSource();
-      recenterOnSelectedRoute();
-    });
-  }
-
-  // If turning ON: start watching position
-  if (!("geolocation" in navigator)) {
-    console.warn("[SUC] Geolocation not supported in this browser.");
-    return;
-  }
-
-  withStyleLoaded(map, () => {
-    // reset any old GPS layer/source
-    cleanupLayerAndSource();
-
-    if (!map.getSource(ID.gpsSrc)) {
-      map.addSource(ID.gpsSrc, {
+      // 🔹 5) Seed empty playback source (dot controlled by playback effect)
+      map.addSource(ID.playbackSrc, {
         type: "geojson",
         data: {
           type: "FeatureCollection",
           features: [],
         },
       });
-    }
 
-    if (!map.getLayer(ID.gpsLayer)) {
       map.addLayer({
-        id: ID.gpsLayer,
+        id: ID.playbackLayer,
         type: "circle",
-        source: ID.gpsSrc,
+        source: ID.playbackSrc,
         paint: {
           "circle-radius": 5,
-          "circle-color": "#00d4ff",
-          "circle-opacity": 1,
+          "circle-color": selectedRoute.color,
           "circle-stroke-width": 2,
           "circle-stroke-color": "#ffffff",
         },
       });
-    }
-  });
+    });
+  }, [event?.eventId, selectedRoute?.id]);
 
-  // start watching position and update dot + recenter on user
-  gpsWatchIdRef.current = navigator.geolocation.watchPosition(
-    (pos) => {
-      const { longitude, latitude } = pos.coords;
+  // 3.5 — SMOOTH EVENT → EVENT CAMERA TRANSITION
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !event) return;
+
+    // First-ever event: just remember and bail
+    if (!lastFittedEventIdRef.current) {
+      lastFittedEventIdRef.current = event.eventId;
+      return;
+    }
+
+    const prev = lastFittedEventIdRef.current;
+    if (prev === event.eventId) return; // same event, no transition
+
+    // Update to new event id
+    lastFittedEventIdRef.current = event.eventId;
+
+    // 1 — Smooth zoom OUT
+    map.easeTo({
+      zoom: 9,
+      duration: 800,
+      pitch: map.getPitch(),
+      bearing: map.getBearing(),
+      easing: (t) => t * t,
+    });
+
+    // 2 — After zooming out, fit to all routes of the new event
+    setTimeout(() => {
+      const allFeatures: Feature<Geometry, GeoJsonProperties>[] = [];
+
+      event.routes.forEach((route) => {
+        const fc = route.geojson;
+        if (!fc || !Array.isArray(fc.features)) return;
+        fc.features.forEach((f) =>
+          allFeatures.push(f as Feature<Geometry, GeoJsonProperties>)
+        );
+      });
+
+      if (!allFeatures.length) return;
+
+      const bounds = new maplibregl.LngLatBounds();
+      allFeatures.forEach((f) => {
+        if (!f.geometry) return;
+        if (f.geometry.type === "LineString") {
+          (f.geometry.coordinates as [number, number][]).forEach((c) =>
+            bounds.extend(c)
+          );
+        } else if (f.geometry.type === "MultiLineString") {
+          (f.geometry.coordinates as [number, number][][]).forEach((line) =>
+            line.forEach((c) => bounds.extend(c))
+          );
+        }
+      });
+
+      if (!bounds.isEmpty()) {
+        map.fitBounds(bounds, {
+          padding: 80,
+          maxZoom: 14,
+          duration: 900,
+        });
+      }
+    }, 820); // just after the zoom-out finishes
+  }, [event?.eventId]);
+
+  // 4. LIVE GPS DOT
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const cleanupLayerAndSource = () => {
       const m = mapRef.current;
       if (!m) return;
+      if (m.getLayer(ID.gpsLayer)) m.removeLayer(ID.gpsLayer);
+      if (m.getSource(ID.gpsSrc)) m.removeSource(ID.gpsSrc);
+    };
 
-      const src = m.getSource(ID.gpsSrc) as
-        | maplibregl.GeoJSONSource
-        | undefined;
-      if (!src) return;
+    const recenterOnSelectedRoute = () => {
+      const m = mapRef.current;
+      if (!m || !selectedRoute || !selectedRoute.geojson) return;
 
-      src.setData({
-        type: "FeatureCollection",
-        features: [
-          {
-            type: "Feature",
-            geometry: {
-              type: "Point",
-              coordinates: [longitude, latitude],
-            },
-            properties: {},
+      try {
+        const feature = selectedRoute.geojson.features[0];
+        if (
+          !feature ||
+          !feature.geometry ||
+          feature.geometry.type !== "LineString" ||
+          !Array.isArray(feature.geometry.coordinates)
+        ) {
+          return;
+        }
+
+        const coords = feature.geometry
+          .coordinates as [number, number][];
+
+        if (!coords.length) return;
+
+        const bounds = coords.reduce(
+          (b, [lng, lat]) => b.extend([lng, lat]),
+          new maplibregl.LngLatBounds(coords[0], coords[0])
+        );
+
+        m.fitBounds(bounds, {
+          padding: 80,
+          duration: 800,
+        });
+      } catch (err) {
+        console.warn("[SUC] Failed to recenter on route:", err);
+      }
+    };
+
+    // If turning OFF: clear watch + remove layer/source + recenter on route
+    if (!isLiveGpsOn) {
+      if (gpsWatchIdRef.current != null && "geolocation" in navigator) {
+        navigator.geolocation.clearWatch(gpsWatchIdRef.current);
+        gpsWatchIdRef.current = null;
+      }
+
+      return withStyleLoaded(map, () => {
+        cleanupLayerAndSource();
+        recenterOnSelectedRoute();
+      });
+    }
+
+    // If turning ON: start watching position
+    if (!("geolocation" in navigator)) {
+      console.warn("[SUC] Geolocation not supported in this browser.");
+      return;
+    }
+
+    withStyleLoaded(map, () => {
+      // reset any old GPS layer/source
+      cleanupLayerAndSource();
+
+      if (!map.getSource(ID.gpsSrc)) {
+        map.addSource(ID.gpsSrc, {
+          type: "geojson",
+          data: {
+            type: "FeatureCollection",
+            features: [],
           },
-        ],
-      });
+        });
+      }
 
-      m.easeTo({
-        center: [longitude, latitude],
-        duration: 800,
-      });
-    },
-    (err) => {
-      console.warn("[SUC] Geolocation error:", err);
-    },
-    {
-      enableHighAccuracy: true,
-      maximumAge: 1000,
-      timeout: 10000,
-    }
-  );
+      if (!map.getLayer(ID.gpsLayer)) {
+        map.addLayer({
+          id: ID.gpsLayer,
+          type: "circle",
+          source: ID.gpsSrc,
+          paint: {
+            "circle-radius": 5,
+            "circle-color": "#00d4ff",
+            "circle-opacity": 1,
+            "circle-stroke-width": 2,
+            "circle-stroke-color": "#ffffff",
+          },
+        });
+      }
+    });
 
-  // safety cleanup if effect re-runs / unmounts
-  return () => {
-    if (gpsWatchIdRef.current != null && "geolocation" in navigator) {
-      navigator.geolocation.clearWatch(gpsWatchIdRef.current);
-      gpsWatchIdRef.current = null;
-    }
-  };
-}, [isLiveGpsOn, selectedRoute]);
+    // start watching position and update dot + recenter on user
+    gpsWatchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { longitude, latitude } = pos.coords;
+        const m = mapRef.current;
+        if (!m) return;
 
+        const src = m.getSource(ID.gpsSrc) as
+          | maplibregl.GeoJSONSource
+          | undefined;
+        if (!src) return;
 
-  // 6. PLAYBACK DOT ALONG SELECTED ROUTE
+        src.setData({
+          type: "FeatureCollection",
+          features: [
+            {
+              type: "Feature",
+              geometry: {
+                type: "Point",
+                coordinates: [longitude, latitude],
+              },
+              properties: {},
+            },
+          ],
+        });
+
+        m.easeTo({
+          center: [longitude, latitude],
+          duration: 800,
+        });
+      },
+      (err) => {
+        console.warn("[SUC] Geolocation error:", err);
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 1000,
+        timeout: 10000,
+      }
+    );
+
+    // safety cleanup if effect re-runs / unmounts
+    return () => {
+      if (gpsWatchIdRef.current != null && "geolocation" in navigator) {
+        navigator.geolocation.clearWatch(gpsWatchIdRef.current);
+        gpsWatchIdRef.current = null;
+      }
+    };
+  }, [isLiveGpsOn, selectedRoute]);
+
+  // 5. PLAYBACK DOT ALONG SELECTED ROUTE
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
