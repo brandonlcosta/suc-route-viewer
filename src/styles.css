@@ -669,7 +669,7 @@ body {
 .suc-calendar-day {
   flex-shrink: 0;
   min-width: 7.4rem;            /* slightly smaller */
-  max-width: 9.4rem;
+  max-width: 11.5rem;
   border-radius: 1.05rem;
   padding: 0.55rem 0.85rem 0.6rem;
   border: 1px solid rgba(95, 105, 210, 0.6);

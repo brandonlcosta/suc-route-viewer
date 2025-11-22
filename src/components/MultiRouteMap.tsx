@@ -64,9 +64,6 @@ export default function MultiRouteMap({
   // Flattened coordinates for the currently selected route (for playback)
   const playbackCoordsRef = useRef<[number, number][]>([]);
 
-  // Track last event we transitioned to (for smooth event→event cam)
-  const lastFittedEventIdRef = useRef<string | null>(null);
-
   // Utility: run once style is loaded
   function withStyleLoaded(map: maplibregl.Map, fn: () => void) {
     if (map.isStyleLoaded()) {
@@ -385,70 +382,6 @@ export default function MultiRouteMap({
       });
     });
   }, [event?.eventId, selectedRoute?.id]);
-
-  // 3.5 — SMOOTH EVENT → EVENT CAMERA TRANSITION
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !event) return;
-
-    // First-ever event: just remember and bail
-    if (!lastFittedEventIdRef.current) {
-      lastFittedEventIdRef.current = event.eventId;
-      return;
-    }
-
-    const prev = lastFittedEventIdRef.current;
-    if (prev === event.eventId) return; // same event, no transition
-
-    // Update to new event id
-    lastFittedEventIdRef.current = event.eventId;
-
-    // 1 — Smooth zoom OUT
-    map.easeTo({
-      zoom: 9,
-      duration: 800,
-      pitch: map.getPitch(),
-      bearing: map.getBearing(),
-      easing: (t) => t * t,
-    });
-
-    // 2 — After zooming out, fit to all routes of the new event
-    setTimeout(() => {
-      const allFeatures: Feature<Geometry, GeoJsonProperties>[] = [];
-
-      event.routes.forEach((route) => {
-        const fc = route.geojson;
-        if (!fc || !Array.isArray(fc.features)) return;
-        fc.features.forEach((f) =>
-          allFeatures.push(f as Feature<Geometry, GeoJsonProperties>)
-        );
-      });
-
-      if (!allFeatures.length) return;
-
-      const bounds = new maplibregl.LngLatBounds();
-      allFeatures.forEach((f) => {
-        if (!f.geometry) return;
-        if (f.geometry.type === "LineString") {
-          (f.geometry.coordinates as [number, number][]).forEach((c) =>
-            bounds.extend(c)
-          );
-        } else if (f.geometry.type === "MultiLineString") {
-          (f.geometry.coordinates as [number, number][][]).forEach((line) =>
-            line.forEach((c) => bounds.extend(c))
-          );
-        }
-      });
-
-      if (!bounds.isEmpty()) {
-        map.fitBounds(bounds, {
-          padding: 80,
-          maxZoom: 14,
-          duration: 900,
-        });
-      }
-    }, 820); // just after the zoom-out finishes
-  }, [event?.eventId]);
 
   // 4. LIVE GPS DOT
   useEffect(() => {
