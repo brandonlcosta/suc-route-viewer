@@ -28,6 +28,7 @@ function thinCoordinates(
   return result;
 }
 
+
 // Choose the default route for an event: prefer "XL", else longest distance
 function pickDefaultRoute(event: SUCEvent | null): SUCRoute | null {
   if (!event || !event.routes.length) return null;
@@ -745,104 +746,6 @@ export default function App() {
           </section>
         )}
       </main>
-
-      {/* CALENDAR OVERLAY */}
-      {overlayCalendarEvents && (
-        <div
-          className="suc-calendar-overlay-backdrop"
-          onClick={closeCalendarOverlay}
-        >
-          <div
-            className="suc-calendar-overlay-panel"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="suc-calendar-overlay-header">
-              <div className="suc-calendar-overlay-title-block">
-                <span className="suc-calendar-overlay-kicker">
-                  SUC calendar •{" "}
-                  {formatPrettyEventDate(
-                    overlayCalendarEvents[0]?.eventDate
-                  ) ?? "TBA"}
-                </span>
-                <h2 className="suc-calendar-overlay-title">
-                  {overlayCalendarEvents.length === 1
-                    ? overlayCalendarEvents[0]?.eventName
-                    : `${overlayCalendarEvents.length} runs`}
-                </h2>
-              </div>
-              <button
-                type="button"
-                className="suc-calendar-overlay-close"
-                onClick={closeCalendarOverlay}
-                aria-label="Close calendar details"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="suc-calendar-overlay-body">
-              {overlayCalendarEvents.map((ev) => (
-                <article
-                  key={ev.eventId}
-                  className="suc-calendar-overlay-event"
-                >
-                  <header className="suc-calendar-overlay-event-header">
-                    <h3>{ev.eventName}</h3>
-                    <div className="suc-calendar-overlay-event-meta">
-                      {formatPrettyEventDate(ev.eventDate) && (
-                        <span className="pill">
-                          {formatPrettyEventDate(ev.eventDate)}
-                        </span>
-                      )}
-                      {ev.eventTime && (
-                        <span className="pill">{ev.eventTime}</span>
-                      )}
-                      {ev.startLocationName && (
-                        <span className="pill">
-                          Start: {ev.startLocationName}
-                        </span>
-                      )}
-                    </div>
-                  </header>
-
-                  {ev.eventDescription && (
-                    <p className="suc-calendar-overlay-event-description">
-                      {ev.eventDescription}
-                    </p>
-                  )}
-
-                  <div className="suc-calendar-overlay-routes">
-                    {ev.routes.map((route) => (
-                      <div
-                        key={route.id}
-                        className={`suc-calendar-overlay-route suc-calendar-overlay-route-${route.label}`}
-                      >
-                        <div className="route-main">
-                          <span className="route-label">{route.label}</span>
-                          <span className="route-distance">
-                            {route.distanceMi.toFixed(1)} mi
-                          </span>
-                          <span className="route-elev">
-                            {Math.round(
-                              route.elevationFt
-                            ).toLocaleString()}{" "}
-                            ft
-                          </span>
-                        </div>
-                        {route.description && (
-                          <p className="route-description">
-                            {route.description}
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </article>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
       <footer className="suc-footer">
         <span>Serving SUC routes at routes.sacultracrew.com</span>
